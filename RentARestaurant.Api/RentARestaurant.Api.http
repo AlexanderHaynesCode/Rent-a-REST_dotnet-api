@@ -1,0 +1,53 @@
+@RentARestaurant.Api_HostAddress = http://localhost:5099
+@tenantSlug = beef-store
+@adminUserId = owner-demo
+
+GET {{RentARestaurant.Api_HostAddress}}/health
+Accept: application/json
+
+###
+
+GET {{RentARestaurant.Api_HostAddress}}/api/public/restaurants/{{tenantSlug}}
+Accept: application/json
+
+###
+
+GET {{RentARestaurant.Api_HostAddress}}/api/admin/restaurant
+X-Tenant-Slug: {{tenantSlug}}
+X-Admin-User-Id: {{adminUserId}}
+Accept: application/json
+
+###
+
+POST {{RentARestaurant.Api_HostAddress}}/api/system/provisioning/tenants
+Content-Type: application/json
+
+{
+	"restaurantName": "Pasta Corner",
+	"ownerEmail": "owner@pastacorner.com",
+	"ownerExternalUserId": "owner-pasta",
+	"subscriptionPlan": "Self-Service",
+	"requestedSlug": "pasta-corner",
+	"stripeCustomerId": "cus_demo",
+	"stripeSubscriptionId": "sub_demo"
+}
+
+###
+
+POST {{RentARestaurant.Api_HostAddress}}/api/stripe/webhooks
+Content-Type: application/json
+Stripe-Signature: replace-with-your-secret-or-leave-empty-in-config
+
+{
+	"eventType": "checkout.session.completed",
+	"eventId": "evt_demo_001",
+	"checkoutCompleted": {
+		"restaurantName": "Burger Hub",
+		"ownerEmail": "owner@burgerhub.com",
+		"ownerExternalUserId": "owner-burger",
+		"subscriptionPlan": "Done-For-You",
+		"requestedSlug": "burger-hub",
+		"stripeCustomerId": "cus_burger",
+		"stripeSubscriptionId": "sub_burger"
+	}
+}
