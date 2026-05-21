@@ -7,7 +7,7 @@ public static class DbInitializer
 {
     public static async Task InitializeAsync(AppDbContext dbContext, CancellationToken cancellationToken)
     {
-        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+        // await dbContext.Database.EnsureCreatedAsync(cancellationToken);
 
         var hasTenants = await dbContext.Tenants.AnyAsync(cancellationToken);
         if (hasTenants)
