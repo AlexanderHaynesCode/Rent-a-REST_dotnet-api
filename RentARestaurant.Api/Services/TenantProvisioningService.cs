@@ -16,9 +16,19 @@ public class TenantProvisioningService(
 
     public async Task<ProvisionTenantResponse> ProvisionTenantAsync(ProvisionTenantRequest request, CancellationToken cancellationToken)
     {
+        if (request is null)
+        {
+            throw new ArgumentException("ProvisionTenantRequest is required.");
+        }
+
         if (string.IsNullOrWhiteSpace(request.RestaurantName))
         {
             throw new ArgumentException("RestaurantName is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.SubscriptionPlan))
+        {
+            throw new ArgumentException("SubscriptionPlan is required.");
         }
 
         var normalizedPlan = request.SubscriptionPlan.Trim();
@@ -31,6 +41,11 @@ public class TenantProvisioningService(
         if (string.IsNullOrWhiteSpace(request.OwnerExternalUserId))
         {
             throw new ArgumentException("OwnerExternalUserId is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.OwnerEmail))
+        {
+            throw new ArgumentException("OwnerEmail is required.");
         }
 
         var externalUserId = request.OwnerExternalUserId.Trim();

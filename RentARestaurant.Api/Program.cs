@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using RentARestaurant.Api.Data;
+using RentARestaurant.Api.Infrastructure.Provisioning;
 using RentARestaurant.Api.Infrastructure.Storage;
 using RentARestaurant.Api.Infrastructure.Stripe;
 using RentARestaurant.Api.Infrastructure.Tenancy;
@@ -13,6 +14,8 @@ builder.Services.Configure<LocalMediaStorageOptions>(
     builder.Configuration.GetSection(LocalMediaStorageOptions.SectionName));
 builder.Services.Configure<StripeOptions>(
     builder.Configuration.GetSection(StripeOptions.SectionName));
+builder.Services.Configure<ProvisioningOptions>(
+    builder.Configuration.GetSection(ProvisioningOptions.SectionName));
 
 // builder.Services.AddDbContext<AppDbContext>(options =>
 //     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
