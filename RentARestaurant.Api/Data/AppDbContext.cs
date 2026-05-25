@@ -40,6 +40,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
         {
             entity.ToTable("tenant_users", "public");
             entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.ExternalUserId).IsUnique();
             entity.HasIndex(x => new { x.TenantId, x.ExternalUserId }).IsUnique();
             entity.Property(x => x.Id).HasColumnName("id");
             entity.Property(x => x.TenantId).HasColumnName("tenant_id");

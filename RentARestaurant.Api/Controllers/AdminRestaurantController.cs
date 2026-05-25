@@ -4,23 +4,66 @@ using RentARestaurant.Api.Contracts;
 using RentARestaurant.Api.Data;
 using RentARestaurant.Api.Domain.Entities;
 using RentARestaurant.Api.Infrastructure.Tenancy;
+using RentARestaurant.Api.Services;
 
 namespace RentARestaurant.Api.Controllers;
 
 [ApiController]
 [Route("api/admin/restaurant")]
-[RequireTenantContext]
-[RequireAdminAccess]
-public class AdminRestaurantController(AppDbContext dbContext, ITenantContext tenantContext) : ControllerBase
+public class AdminRestaurantController(
+    AppDbContext dbContext,
+    ITenantContext tenantContext,
+    ITenantAccessService tenantAccessService) : ControllerBase
 {
     [HttpGet]
+    [RequireTenantContext]
+    [RequireAdminAccess]
     public async Task<ActionResult<PublicRestaurantResponse>> GetCurrent(CancellationToken cancellationToken)
     {
-        var data = await BuildRestaurantResponseAsync(cancellationToken);
+        var data = await BuildRestaurantResponseAsync(tenantContext.TenantId!.Value, cancellationToken);
         return Ok(data);
     }
 
+    [HttpGet("bootstrap")]
+    [RequireAdminUser]
+    public async Task<ActionResult<AdminBootstrapResponse>> GetBootstrap(CancellationToken cancellationToken)
+    {
+        var externalUserId = HttpContext.Request.Headers["X-Admin-User-Id"].ToString().Trim();
+        var resolution = await tenantAccessService.ResolveSingleTenantForAdminAsync(externalUserId, cancellationToken);
+
+        if (resolution.Status == TenantResolutionStatus.NotFound || resolution.Tenant is null)
+        {
+            return NotFound(new { Error = "No active tenant membership found for this admin user." });
+        }
+
+        if (resolution.Status == TenantResolutionStatus.MultipleMatches)
+        {
+            return Conflict(new
+            {
+                Error = "Multiple tenant memberships found for this admin user.",
+                Matches = resolution.MatchCount
+            });
+        }
+
+        tenantContext.SetTenant(resolution.Tenant.TenantId, resolution.Tenant.Slug);
+
+        var restaurant = await BuildRestaurantResponseAsync(resolution.Tenant.TenantId, cancellationToken);
+        var response = new AdminBootstrapResponse(
+            new AdminTenantSummaryResponse(
+                resolution.Tenant.TenantId,
+                resolution.Tenant.Slug,
+                resolution.Tenant.Name,
+                resolution.Tenant.CustomDomain,
+                resolution.Tenant.IsActive,
+                resolution.Tenant.SubscriptionState),
+            restaurant);
+
+        return Ok(response);
+    }
+
     [HttpPut("branding")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
     public async Task<IActionResult> UpdateBranding([FromBody] UpdateBrandingRequest request, CancellationToken cancellationToken)
     {
         var profile = await dbContext.RestaurantProfiles.SingleOrDefaultAsync(cancellationToken);
@@ -43,6 +86,8 @@ public class AdminRestaurantController(AppDbContext dbContext, ITenantContext te
     }
 
     [HttpPut("hours")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
     public async Task<IActionResult> UpsertHours([FromBody] IReadOnlyList<UpsertBusinessHourRequest> request, CancellationToken cancellationToken)
     {
         var existing = await dbContext.BusinessHours.ToListAsync(cancellationToken);
@@ -75,6 +120,8 @@ public class AdminRestaurantController(AppDbContext dbContext, ITenantContext te
     }
 
     [HttpPost("menu/categories")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
     public async Task<ActionResult<Guid>> CreateCategory([FromBody] CreateMenuCategoryRequest request, CancellationToken cancellationToken)
     {
         var category = new MenuCategory
@@ -92,6 +139,8 @@ public class AdminRestaurantController(AppDbContext dbContext, ITenantContext te
     }
 
     [HttpPost("menu/items")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
     public async Task<ActionResult<Guid>> CreateMenuItem([FromBody] CreateMenuItemRequest request, CancellationToken cancellationToken)
     {
         var categoryExists = await dbContext.MenuCategories.AnyAsync(x => x.Id == request.CategoryId, cancellationToken);
@@ -118,27 +167,31 @@ public class AdminRestaurantController(AppDbContext dbContext, ITenantContext te
         return CreatedAtAction(nameof(GetCurrent), new { }, item.Id);
     }
 
-    private async Task<PublicRestaurantResponse> BuildRestaurantResponseAsync(CancellationToken cancellationToken)
+    private async Task<PublicRestaurantResponse> BuildRestaurantResponseAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var profile = await dbContext.RestaurantProfiles
+            .Where(x => x.TenantId == tenantId)
             .AsNoTracking()
             .SingleAsync(cancellationToken);
 
         var tenant = await dbContext.Tenants
             .AsNoTracking()
-            .SingleAsync(x => x.Id == tenantContext.TenantId!.Value, cancellationToken);
+            .SingleAsync(x => x.Id == tenantId, cancellationToken);
 
         var categories = await dbContext.MenuCategories
+            .Where(x => x.TenantId == tenantId)
             .AsNoTracking()
             .OrderBy(x => x.SortOrder)
             .ToListAsync(cancellationToken);
 
         var items = await dbContext.MenuItems
+            .Where(x => x.TenantId == tenantId)
             .AsNoTracking()
             .OrderBy(x => x.SortOrder)
             .ToListAsync(cancellationToken);
 
         var hours = await dbContext.BusinessHours
+            .Where(x => x.TenantId == tenantId)
             .AsNoTracking()
             .OrderBy(x => x.DayOfWeek)
             .ToListAsync(cancellationToken);

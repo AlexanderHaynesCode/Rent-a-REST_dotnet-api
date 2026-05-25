@@ -50,6 +50,15 @@ public class TenantProvisioningService(
 
         var externalUserId = request.OwnerExternalUserId.Trim();
 
+        var existingMembership = await dbContext.TenantUsers
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .AnyAsync(x => x.ExternalUserId.Trim() == externalUserId, cancellationToken);
+        if (existingMembership)
+        {
+            throw new ArgumentException("OwnerExternalUserId is already assigned to a tenant.");
+        }
+
         var slug = await BuildUniqueSlugAsync(request.RequestedSlug ?? request.RestaurantName, cancellationToken);
         var tenantId = Guid.NewGuid();
 
