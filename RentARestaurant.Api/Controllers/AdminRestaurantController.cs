@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using RentARestaurant.Api.Contracts;
 using RentARestaurant.Api.Data;
 using RentARestaurant.Api.Domain.Entities;
+using RentARestaurant.Api.Infrastructure.Storage;
 using RentARestaurant.Api.Infrastructure.Tenancy;
 using RentARestaurant.Api.Services;
 
@@ -13,7 +14,8 @@ namespace RentARestaurant.Api.Controllers;
 public class AdminRestaurantController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
-    ITenantAccessService tenantAccessService) : ControllerBase
+    ITenantAccessService tenantAccessService,
+    IR2StorageService r2StorageService) : ControllerBase
 {
     [HttpGet]
     [RequireTenantContext]
@@ -117,6 +119,76 @@ public class AdminRestaurantController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
+    }
+
+    [HttpPost("images/{imageType}")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> UploadBrandingImage(
+        string imageType,
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        var allowedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "logo", "hero", "primary-cta" };
+        if (!allowedTypes.Contains(imageType))
+        {
+            return BadRequest(new { Error = "imageType must be one of: logo, hero, primary-cta." });
+        }
+
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new { Error = "No file provided." });
+        }
+
+        var allowedContentTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "image/jpeg", "image/png" };
+        if (!allowedContentTypes.Contains(file.ContentType))
+        {
+            return BadRequest(new { Error = "Only JPEG and PNG images are accepted." });
+        }
+
+        const long maxBytes = 10 * 1024 * 1024; // 10 MB
+        if (file.Length > maxBytes)
+        {
+            return BadRequest(new { Error = "File size must not exceed 10 MB." });
+        }
+
+        var profile = await dbContext.RestaurantProfiles
+            .SingleOrDefaultAsync(x => x.TenantId == tenantContext.TenantId!.Value, cancellationToken);
+        if (profile is null)
+        {
+            return NotFound();
+        }
+
+        string url;
+        try
+        {
+            await using (var stream = file.OpenReadStream())
+            {
+                url = await r2StorageService.UploadImageAsync(
+                    tenantContext.TenantId!.Value,
+                    imageType,
+                    stream,
+                    file.ContentType,
+                    cancellationToken);
+            }
+        } 
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { Error = "Failed to upload image.", Details = ex.Message });
+        }
+        
+
+        switch (imageType)
+        {
+            case "logo":       profile.LogoUrl = url;       break;
+            case "hero":       profile.HeroImageUrl = url;  break;
+            case "primary-cta": profile.PrimaryCtaUrl = url; break;
+        }
+
+        profile.UpdatedUtc = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new { url });
     }
 
     [HttpPost("menu/categories")]

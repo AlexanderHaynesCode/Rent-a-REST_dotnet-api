@@ -16,6 +16,8 @@ builder.Services.Configure<StripeOptions>(
     builder.Configuration.GetSection(StripeOptions.SectionName));
 builder.Services.Configure<ProvisioningOptions>(
     builder.Configuration.GetSection(ProvisioningOptions.SectionName));
+builder.Services.Configure<CloudflareR2Options>(
+    builder.Configuration.GetSection(CloudflareR2Options.SectionName));
 
 // builder.Services.AddDbContext<AppDbContext>(options =>
 //     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -27,6 +29,7 @@ builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
 builder.Services.AddScoped<IMediaNamespaceProvisioner, LocalMediaNamespaceProvisioner>();
 builder.Services.AddScoped<ITenantAccessService, TenantAccessService>();
+builder.Services.AddSingleton<IR2StorageService, CloudflareR2StorageService>();
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();

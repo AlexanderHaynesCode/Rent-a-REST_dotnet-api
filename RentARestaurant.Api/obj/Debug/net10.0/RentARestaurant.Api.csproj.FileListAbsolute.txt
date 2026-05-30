@@ -121,3 +121,5 @@ C:\Users\The Beash\Coding\Rent-a-RESTaurant\dotnet-api\RentARestaurant.Api\obj\D
 C:\Users\The Beash\Coding\Rent-a-RESTaurant\dotnet-api\RentARestaurant.Api\obj\Debug\net10.0\RentARestaurant.Api.pdb
 C:\Users\The Beash\Coding\Rent-a-RESTaurant\dotnet-api\RentARestaurant.Api\obj\Debug\net10.0\RentARestaurant.Api.genruntimeconfig.cache
 C:\Users\The Beash\Coding\Rent-a-RESTaurant\dotnet-api\RentARestaurant.Api\obj\Debug\net10.0\ref\RentARestaurant.Api.dll
+C:\Users\The Beash\Coding\Rent-a-RESTaurant\dotnet-api\RentARestaurant.Api\bin\Debug\net10.0\AWSSDK.Core.dll
+C:\Users\The Beash\Coding\Rent-a-RESTaurant\dotnet-api\RentARestaurant.Api\bin\Debug\net10.0\AWSSDK.S3.dll
