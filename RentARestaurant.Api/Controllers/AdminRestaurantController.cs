@@ -30,37 +30,44 @@ public class AdminRestaurantController(
     [RequireAdminUser]
     public async Task<ActionResult<AdminBootstrapResponse>> GetBootstrap(CancellationToken cancellationToken)
     {
-        var externalUserId = HttpContext.Request.Headers["X-Admin-User-Id"].ToString().Trim();
-        var resolution = await tenantAccessService.ResolveSingleTenantForAdminAsync(externalUserId, cancellationToken);
-
-        if (resolution.Status == TenantResolutionStatus.NotFound || resolution.Tenant is null)
+        try
         {
-            return NotFound(new { Error = "No active tenant membership found for this admin user." });
-        }
+            var externalUserId = HttpContext.Request.Headers["X-Admin-User-Id"].ToString().Trim();
+            var resolution = await tenantAccessService.ResolveSingleTenantForAdminAsync(externalUserId, cancellationToken);
 
-        if (resolution.Status == TenantResolutionStatus.MultipleMatches)
-        {
-            return Conflict(new
+            if (resolution.Status == TenantResolutionStatus.NotFound || resolution.Tenant is null)
             {
-                Error = "Multiple tenant memberships found for this admin user.",
-                Matches = resolution.MatchCount
-            });
+                return NotFound(new { Error = "No active tenant membership found for this admin user." });
+            }
+
+            if (resolution.Status == TenantResolutionStatus.MultipleMatches)
+            {
+                return Conflict(new
+                {
+                    Error = "Multiple tenant memberships found for this admin user.",
+                    Matches = resolution.MatchCount
+                });
+            }
+
+            tenantContext.SetTenant(resolution.Tenant.TenantId, resolution.Tenant.Slug);
+
+            var restaurant = await BuildRestaurantResponseAsync(resolution.Tenant.TenantId, cancellationToken);
+            var response = new AdminBootstrapResponse(
+                new AdminTenantSummaryResponse(
+                    resolution.Tenant.TenantId,
+                    resolution.Tenant.Slug,
+                    resolution.Tenant.Name,
+                    resolution.Tenant.CustomDomain,
+                    resolution.Tenant.IsActive,
+                    resolution.Tenant.SubscriptionState),
+                restaurant);
+
+            return Ok(response);
         }
-
-        tenantContext.SetTenant(resolution.Tenant.TenantId, resolution.Tenant.Slug);
-
-        var restaurant = await BuildRestaurantResponseAsync(resolution.Tenant.TenantId, cancellationToken);
-        var response = new AdminBootstrapResponse(
-            new AdminTenantSummaryResponse(
-                resolution.Tenant.TenantId,
-                resolution.Tenant.Slug,
-                resolution.Tenant.Name,
-                resolution.Tenant.CustomDomain,
-                resolution.Tenant.IsActive,
-                resolution.Tenant.SubscriptionState),
-            restaurant);
-
-        return Ok(response);
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { Error = "DERP An unexpected error occurred during bootstrap.", Details = ex.Message });
+        }        
     }
 
     [HttpPut("branding")]
