@@ -32,7 +32,9 @@ public class TenantResolutionMiddleware(RequestDelegate next)
             slug = TryGetSlugFromPath(httpContext.Request.Path);
         }
 
-        if (string.IsNullOrWhiteSpace(slug) && ShouldAttemptCustomDomainLookup(host, options.Value))
+        if (string.IsNullOrWhiteSpace(slug)
+            && !IsAdminRoute(httpContext.Request.Path)
+            && ShouldAttemptCustomDomainLookup(host, options.Value))
         {
             var tenantByDomain = await dbContext.Tenants
                 .AsNoTracking()
@@ -68,6 +70,11 @@ public class TenantResolutionMiddleware(RequestDelegate next)
                || path.StartsWithSegments("/health")
                || path.StartsWithSegments("/openapi")
                || path.StartsWithSegments("/swagger");
+    }
+
+    private static bool IsAdminRoute(PathString path)
+    {
+        return path.StartsWithSegments("/api/admin");
     }
 
     private static bool ShouldAttemptCustomDomainLookup(string host, TenantResolutionOptions options)

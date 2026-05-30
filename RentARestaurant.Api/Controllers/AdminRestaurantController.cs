@@ -244,7 +244,12 @@ public class AdminRestaurantController(
         var profile = await dbContext.RestaurantProfiles
             .Where(x => x.TenantId == tenantId)
             .AsNoTracking()
-            .SingleAsync(cancellationToken);
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (profile is null)
+        {
+            throw new InvalidOperationException($"Restaurant profile not found for tenant {tenantId}. Provisioning may be incomplete.");
+        }
 
         var tenant = await dbContext.Tenants
             .AsNoTracking()

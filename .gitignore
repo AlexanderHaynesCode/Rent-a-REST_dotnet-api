@@ -1,0 +1,70 @@
+## .NET / C#
+
+# Build outputs
+bin/
+obj/
+*.dll
+*.pdb
+*.exe
+
+# NuGet packages
+*.nupkg
+*.snupkg
+*.nuget.dgspec.json
+packages/
+.nuget/
+
+# Visual Studio files
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Rider
+.idea/
+*.sln.iml
+
+# Rider / ReSharper
+_ReSharper*/
+*.DotSettings.user
+
+# JetBrains
+.idea/
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# Publish output
+publish/
+*.pubxml
+*.pubxml.user
+
+# Crash dumps
+*.mdmp
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment / secrets
+.env
+.env.*
+appsettings.Local.json
+appsettings.*.Local.json
+secrets.json
+
+# Logs
+*.log
+logs/
+
+# Docker
+.dockerignore
+
+# Azure
+.azure/
