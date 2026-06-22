@@ -91,7 +91,7 @@ public class TenantProvisioningService(
             DisplayName = tenant.Name,
             Tagline = "",
             PrimaryHexColor = "#222222",
-            SecondaryHexColor = "#ffffff"
+            SecondaryHexColor = "#aaaaaa"
         };
 
         var businessHours = new List<BusinessHour>();
