@@ -44,10 +44,21 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             .OrderBy(x => x.SortOrder)
             .ToListAsync(cancellationToken);
 
-        var hours = await dbContext.BusinessHours
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var windowEnd = today.AddDays(6);
+
+        var allHours = await dbContext.BusinessHours
             .AsNoTracking()
-            .OrderBy(x => x.DayOfWeek)
+            .Where(h => h.Date == null || (h.Date >= today && h.Date <= windowEnd))
             .ToListAsync(cancellationToken);
+
+        var resolvedHours = Enumerable.Range(0, 7)
+            .Select(offset => today.AddDays(offset))
+            .Select(date =>
+                allHours.FirstOrDefault(h => h.Date == date) ??
+                allHours.FirstOrDefault(h => h.Date == null && h.DayOfWeek == date.DayOfWeek))
+            .Where(h => h is not null)
+            .ToList();
 
         var menu = categories
             .Select(category => new PublicMenuCategoryResponse(
@@ -77,8 +88,8 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             profile.HeroImageUrl,
             profile.PrimaryCtaUrl,
             menu,
-            hours.Select(hour => new BusinessHourResponse(
-                hour.DayOfWeek,
+            resolvedHours.Select(hour => new BusinessHourResponse(
+                hour!.DayOfWeek,
                 hour.OpenTime.ToString("HH:mm"),
                 hour.CloseTime.ToString("HH:mm"),
                 hour.IsClosed)).ToList()));

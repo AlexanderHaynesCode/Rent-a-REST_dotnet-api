@@ -15,6 +15,12 @@ public sealed record UpsertBusinessHourRequest(
     TimeOnly CloseTime,
     bool IsClosed);
 
+public sealed record UpsertDateSpecificHourRequest(
+    DateOnly Date,
+    TimeOnly OpenTime,
+    TimeOnly CloseTime,
+    bool IsClosed);
+
 public sealed record CreateMenuCategoryRequest(
     string Name,
     int SortOrder);
@@ -25,4 +31,16 @@ public sealed record CreateMenuItemRequest(
     string Description,
     decimal Price,
     bool IsAvailable,
+    int SortOrder);
+
+public sealed record UpdateMenuItemRequest(
+    Guid CategoryId,
+    string Name,
+    string Description,
+    decimal Price,
+    bool IsAvailable,
+    int SortOrder);
+
+public sealed record MenuReorderEntry(
+    Guid Id,
     int SortOrder);

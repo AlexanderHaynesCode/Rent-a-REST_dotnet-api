@@ -116,13 +116,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
         {
             entity.ToTable("business_hours", "public");
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.TenantId, x.DayOfWeek }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.DayOfWeek, x.Date }).IsUnique();
             entity.Property(x => x.Id).HasColumnName("id");
             entity.Property(x => x.TenantId).HasColumnName("tenant_id");
             entity.Property(x => x.DayOfWeek).HasColumnName("day_of_week");
             entity.Property(x => x.OpenTime).HasColumnName("open_time");
             entity.Property(x => x.CloseTime).HasColumnName("close_time");
             entity.Property(x => x.IsClosed).HasColumnName("is_closed");
+            entity.Property(x => x.Date).HasColumnName("date");
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.BusinessHours)
                 .HasForeignKey(x => x.TenantId)

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using RentARestaurant.Api.Contracts;
 using RentARestaurant.Api.Data;
 using RentARestaurant.Api.Domain.Entities;
+using RentARestaurant.Api.Infrastructure.Email;
 using RentARestaurant.Api.Infrastructure.Storage;
 
 namespace RentARestaurant.Api.Services;
@@ -10,6 +11,7 @@ namespace RentARestaurant.Api.Services;
 public class TenantProvisioningService(
     AppDbContext dbContext,
     IMediaNamespaceProvisioner mediaNamespaceProvisioner,
+    IEmailService emailService,
     ILogger<TenantProvisioningService> logger) : ITenantProvisioningService
 {
     private static readonly Regex SlugSanitizerRegex = new("[^a-z0-9-]", RegexOptions.Compiled);
@@ -90,17 +92,40 @@ public class TenantProvisioningService(
             Tagline = "",
             PrimaryHexColor = "#222222",
             SecondaryHexColor = "#ffffff"
-        };        
+        };
+
+        var businessHours = new List<BusinessHour>();
+        for (var i = 0; i < 7; i++)        {
+            businessHours.Add(new BusinessHour
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                DayOfWeek = (DayOfWeek)i,
+                OpenTime = new TimeOnly(11, 0),
+                CloseTime = new TimeOnly(22, 0),
+                IsClosed = i == 1
+            });
+        }        
 
         dbContext.Tenants.Add(tenant);
         dbContext.TenantUsers.Add(tenantUser);
         dbContext.RestaurantProfiles.Add(profile);
+        dbContext.BusinessHours.AddRange(businessHours);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var mediaNamespace = await mediaNamespaceProvisioner.CreateTenantNamespaceAsync(tenantId, cancellationToken);
 
         logger.LogInformation("Provisioned tenant {TenantId} with slug {Slug}", tenantId, slug);
+
+        try
+        {
+            await emailService.SendWelcomeEmailAsync(request.OwnerEmail.Trim(), request.RestaurantName.Trim(), slug, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send welcome email to {Email} for tenant {TenantId}", request.OwnerEmail, tenantId);
+        }
 
         return new ProvisionTenantResponse(tenantId, slug, tenant.IsActive, mediaNamespace);
     }

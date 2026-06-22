@@ -10,7 +10,7 @@ public class BusinessHour : ITenantEntity
     public TimeOnly OpenTime { get; set; }
     public TimeOnly CloseTime { get; set; }
     public bool IsClosed { get; set; }
-    // add public DateOnly? Date { get; set; } if we want to support special hours for specific dates (e.g. holidays)
+    public DateOnly? Date { get; set; }
 
     public Tenant Tenant { get; set; } = null!;
 }

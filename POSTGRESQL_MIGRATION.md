@@ -212,6 +212,7 @@ CREATE TABLE business_hours (
     open_time TIME NOT NULL,
     close_time TIME NOT NULL,
     is_closed BOOLEAN NOT NULL DEFAULT false,
+    date DATE,
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     UNIQUE(tenant_id, day_of_week),
@@ -326,9 +327,10 @@ CREATE TABLE business_hours (
     day_of_week SMALLINT NOT NULL,
     open_time TIME NOT NULL,
     close_time TIME NOT NULL,
-    is_closed BOOLEAN NOT NULL DEFAULT false,
+    is_closed BOOLEAN NOT NULL DEFAULT false,    
+    date DATE,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-    UNIQUE(tenant_id, day_of_week),
+    UNIQUE(tenant_id, day_of_week, date),
     CONSTRAINT day_of_week_valid CHECK (day_of_week >= 0 AND day_of_week <= 6),
     CONSTRAINT close_time_after_open CHECK (close_time > open_time OR is_closed = true)
 );

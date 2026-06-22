@@ -99,11 +99,11 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<IActionResult> UpsertHours([FromBody] IReadOnlyList<UpsertBusinessHourRequest> request, CancellationToken cancellationToken)
     {
-        var existing = await dbContext.BusinessHours.ToListAsync(cancellationToken);
+        var existing = await dbContext.BusinessHours.Where(x => x.Date == null).ToListAsync(cancellationToken);
 
         foreach (var hour in request)
         {
-            var target = existing.FirstOrDefault(x => x.DayOfWeek == hour.DayOfWeek);
+            var target = existing.FirstOrDefault(x => x.DayOfWeek == hour.DayOfWeek && x.Date == null);
             if (target is null)
             {
                 dbContext.BusinessHours.Add(new BusinessHour
@@ -126,6 +126,64 @@ public class AdminRestaurantController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
+    }
+
+    [HttpPost("hours/date-specific")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> UpsertDateSpecificHours([FromBody] IReadOnlyList<UpsertDateSpecificHourRequest> request, CancellationToken cancellationToken)
+    {
+        try 
+        {
+            if (request.Count == 0 || request.Count > 7)
+                return BadRequest(new { Error = "You must provide between 1 and 7 date-specific hours." });
+
+            foreach (var item in request)
+            {
+                if (!item.IsClosed && item.OpenTime >= item.CloseTime)
+                    return BadRequest(new { Error = $"Open time must be before close time for {item.Date:yyyy-MM-dd}." });
+            }
+
+            var dates = request.Select(x => x.Date).ToList();
+            if (dates.Distinct().Count() != dates.Count)
+                return BadRequest(new { Error = "Duplicate dates are not allowed." });
+
+            var existing = await dbContext.BusinessHours
+                .Where(x => x.Date != null && dates.Contains(x.Date!.Value))
+                .ToListAsync(cancellationToken);
+
+            foreach (var item in request)
+            {
+                var target = existing.FirstOrDefault(x => x.Date == item.Date);
+                if (target is null)
+                {
+                    dbContext.BusinessHours.Add(new BusinessHour
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantContext.TenantId!.Value,
+                        DayOfWeek = item.Date.DayOfWeek,
+                        OpenTime = item.OpenTime,
+                        CloseTime = item.CloseTime,
+                        IsClosed = item.IsClosed,
+                        Date = item.Date
+                    });
+                }
+                else
+                {
+                    target.DayOfWeek = item.Date.DayOfWeek;
+                    target.OpenTime = item.OpenTime;
+                    target.CloseTime = item.CloseTime;
+                    target.IsClosed = item.IsClosed;
+                }
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { Error = "Failed to upsert date-specific hours.", Details = ex.Message });
+        }
     }
 
     [HttpPost("images/{imageType}")]
@@ -246,6 +304,145 @@ public class AdminRestaurantController(
         return CreatedAtAction(nameof(GetCurrent), new { }, item.Id);
     }
 
+    [HttpGet("hours/date-specific")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<ActionResult<IReadOnlyList<AdminDateSpecificHourResponse>>> GetDateSpecificHours(CancellationToken cancellationToken)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var hours = await dbContext.BusinessHours
+            .Where(x => x.TenantId == tenantContext.TenantId!.Value && x.Date != null && x.Date >= today)
+            .AsNoTracking()
+            .OrderBy(x => x.Date)
+            .ToListAsync(cancellationToken);
+
+        var response = hours.Select(h => new AdminDateSpecificHourResponse(
+            h.Date!.Value,
+            h.DayOfWeek,
+            h.OpenTime.ToString("HH:mm"),
+            h.CloseTime.ToString("HH:mm"),
+            h.IsClosed)).ToList();
+
+        return Ok(response);
+    }
+
+    [HttpDelete("hours/date-specific/{date}")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> DeleteDateSpecificHour(DateOnly date, CancellationToken cancellationToken)
+    {
+        var hour = await dbContext.BusinessHours
+            .SingleOrDefaultAsync(x => x.TenantId == tenantContext.TenantId!.Value && x.Date == date, cancellationToken);
+        if (hour is null)
+            return NotFound();
+
+        dbContext.BusinessHours.Remove(hour);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [HttpDelete("menu/categories/{id:guid}")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> DeleteCategory(Guid id, CancellationToken cancellationToken)
+    {
+        var category = await dbContext.MenuCategories
+            .SingleOrDefaultAsync(x => x.Id == id && x.TenantId == tenantContext.TenantId!.Value, cancellationToken);
+        if (category is null)
+            return NotFound();
+
+        var items = await dbContext.MenuItems
+            .Where(x => x.CategoryId == id)
+            .ToListAsync(cancellationToken);
+
+        dbContext.MenuItems.RemoveRange(items);
+        dbContext.MenuCategories.Remove(category);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [HttpDelete("menu/items/{id:guid}")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> DeleteMenuItem(Guid id, CancellationToken cancellationToken)
+    {
+        var item = await dbContext.MenuItems
+            .SingleOrDefaultAsync(x => x.Id == id && x.TenantId == tenantContext.TenantId!.Value, cancellationToken);
+        if (item is null)
+            return NotFound();
+
+        dbContext.MenuItems.Remove(item);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPut("menu/items/{id:guid}")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> UpdateMenuItem(Guid id, [FromBody] UpdateMenuItemRequest request, CancellationToken cancellationToken)
+    {
+        var item = await dbContext.MenuItems
+            .SingleOrDefaultAsync(x => x.Id == id && x.TenantId == tenantContext.TenantId!.Value, cancellationToken);
+        if (item is null)
+            return NotFound();
+
+        var categoryExists = await dbContext.MenuCategories
+            .AnyAsync(x => x.Id == request.CategoryId && x.TenantId == tenantContext.TenantId!.Value, cancellationToken);
+        if (!categoryExists)
+            return BadRequest(new { Error = "Category does not exist for this tenant." });
+
+        item.CategoryId = request.CategoryId;
+        item.Name = request.Name.Trim();
+        item.Description = request.Description.Trim();
+        item.Price = request.Price;
+        item.IsAvailable = request.IsAvailable;
+        item.SortOrder = request.SortOrder;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPut("menu/categories/reorder")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> ReorderCategories([FromBody] IReadOnlyList<MenuReorderEntry> request, CancellationToken cancellationToken)
+    {
+        var ids = request.Select(x => x.Id).ToList();
+        var categories = await dbContext.MenuCategories
+            .Where(x => x.TenantId == tenantContext.TenantId!.Value && ids.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+
+        foreach (var entry in request)
+        {
+            var category = categories.FirstOrDefault(x => x.Id == entry.Id);
+            if (category is not null)
+                category.SortOrder = entry.SortOrder;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPut("menu/items/reorder")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> ReorderMenuItems([FromBody] IReadOnlyList<MenuReorderEntry> request, CancellationToken cancellationToken)
+    {
+        var ids = request.Select(x => x.Id).ToList();
+        var items = await dbContext.MenuItems
+            .Where(x => x.TenantId == tenantContext.TenantId!.Value && ids.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+
+        foreach (var entry in request)
+        {
+            var item = items.FirstOrDefault(x => x.Id == entry.Id);
+            if (item is not null)
+                item.SortOrder = entry.SortOrder;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
     private async Task<PublicRestaurantResponse> BuildRestaurantResponseAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var profile = await dbContext.RestaurantProfiles
@@ -274,11 +471,18 @@ public class AdminRestaurantController(
             .OrderBy(x => x.SortOrder)
             .ToListAsync(cancellationToken);
 
-        var hours = await dbContext.BusinessHours
-            .Where(x => x.TenantId == tenantId)
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var allHours = await dbContext.BusinessHours
+            .Where(x => x.TenantId == tenantId && (x.Date == null || x.Date == today))
             .AsNoTracking()
-            .OrderBy(x => x.DayOfWeek)
             .ToListAsync(cancellationToken);
+
+        var hours = allHours
+            .GroupBy(x => x.DayOfWeek)
+            .Select(g => g.FirstOrDefault(x => x.Date == today) ?? g.First(x => x.Date == null))
+            .OrderBy(x => x.DayOfWeek)
+            .ToList();
 
         var menu = categories
             .Select(category => new PublicMenuCategoryResponse(
