@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using RentARestaurant.Api.Data;
+using RentARestaurant.Api.Infrastructure.Agent;
 using RentARestaurant.Api.Infrastructure.Email;
 using RentARestaurant.Api.Infrastructure.Provisioning;
 using RentARestaurant.Api.Infrastructure.Storage;
@@ -21,6 +22,8 @@ builder.Services.Configure<EmailOptions>(
     builder.Configuration.GetSection(EmailOptions.SectionName));
 builder.Services.Configure<CloudflareR2Options>(
     builder.Configuration.GetSection(CloudflareR2Options.SectionName));
+builder.Services.Configure<AgentOptions>(
+    builder.Configuration.GetSection(AgentOptions.SectionName));
 
 // builder.Services.AddDbContext<AppDbContext>(options =>
 //     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -33,6 +36,7 @@ builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddScoped<IMediaNamespaceProvisioner, LocalMediaNamespaceProvisioner>();
 builder.Services.AddScoped<ITenantAccessService, TenantAccessService>();
+builder.Services.AddScoped<IRestaurantAdminService, RestaurantAdminService>();
 builder.Services.AddSingleton<IR2StorageService, CloudflareR2StorageService>();
 
 builder.Services.AddControllers();

@@ -15,14 +15,15 @@ public class AdminRestaurantController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
     ITenantAccessService tenantAccessService,
-    IR2StorageService r2StorageService) : ControllerBase
+    IR2StorageService r2StorageService,
+    IRestaurantAdminService restaurantAdminService) : ControllerBase
 {
     [HttpGet]
     [RequireTenantContext]
     [RequireAdminAccess]
     public async Task<ActionResult<PublicRestaurantResponse>> GetCurrent(CancellationToken cancellationToken)
     {
-        var data = await BuildRestaurantResponseAsync(tenantContext.TenantId!.Value, cancellationToken);
+        var data = await restaurantAdminService.GetSnapshotAsync(tenantContext.TenantId!.Value, cancellationToken);
         return Ok(data);
     }
 
@@ -51,7 +52,7 @@ public class AdminRestaurantController(
 
             tenantContext.SetTenant(resolution.Tenant.TenantId, resolution.Tenant.Slug);
 
-            var restaurant = await BuildRestaurantResponseAsync(resolution.Tenant.TenantId, cancellationToken);
+            var restaurant = await restaurantAdminService.GetSnapshotAsync(resolution.Tenant.TenantId, cancellationToken);
             var response = new AdminBootstrapResponse(
                 new AdminTenantSummaryResponse(
                     resolution.Tenant.TenantId,
@@ -75,22 +76,23 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<IActionResult> UpdateBranding([FromBody] UpdateBrandingRequest request, CancellationToken cancellationToken)
     {
-        var profile = await dbContext.RestaurantProfiles.SingleOrDefaultAsync(cancellationToken);
-        if (profile is null)
+        var trimmedRequest = request with
+        {
+            DisplayName = request.DisplayName.Trim(),
+            Tagline = request.Tagline.Trim(),
+            PrimaryHexColor = request.PrimaryHexColor.Trim(),
+            SecondaryHexColor = request.SecondaryHexColor.Trim(),
+            LogoUrl = request.LogoUrl?.Trim(),
+            HeroImageUrl = request.HeroImageUrl?.Trim(),
+            PrimaryCtaUrl = request.PrimaryCtaUrl?.Trim()
+        };
+
+        var updated = await restaurantAdminService.UpdateBrandingAsync(tenantContext.TenantId!.Value, trimmedRequest, cancellationToken);
+        if (!updated)
         {
             return NotFound();
         }
 
-        profile.DisplayName = request.DisplayName.Trim();
-        profile.Tagline = request.Tagline.Trim();
-        profile.PrimaryHexColor = request.PrimaryHexColor.Trim();
-        profile.SecondaryHexColor = request.SecondaryHexColor.Trim();
-        profile.LogoUrl = request.LogoUrl?.Trim();
-        profile.HeroImageUrl = request.HeroImageUrl?.Trim();
-        profile.PrimaryCtaUrl = request.PrimaryCtaUrl?.Trim();
-        profile.UpdatedUtc = DateTime.UtcNow;
-
-        await dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
 
@@ -99,32 +101,7 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<IActionResult> UpsertHours([FromBody] IReadOnlyList<UpsertBusinessHourRequest> request, CancellationToken cancellationToken)
     {
-        var existing = await dbContext.BusinessHours.Where(x => x.Date == null).ToListAsync(cancellationToken);
-
-        foreach (var hour in request)
-        {
-            var target = existing.FirstOrDefault(x => x.DayOfWeek == hour.DayOfWeek && x.Date == null);
-            if (target is null)
-            {
-                dbContext.BusinessHours.Add(new BusinessHour
-                {
-                    Id = Guid.NewGuid(),
-                    TenantId = tenantContext.TenantId!.Value,
-                    DayOfWeek = hour.DayOfWeek,
-                    OpenTime = hour.OpenTime,
-                    CloseTime = hour.CloseTime,
-                    IsClosed = hour.IsClosed
-                });
-            }
-            else
-            {
-                target.OpenTime = hour.OpenTime;
-                target.CloseTime = hour.CloseTime;
-                target.IsClosed = hour.IsClosed;
-            }
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await restaurantAdminService.UpsertHoursAsync(tenantContext.TenantId!.Value, request, cancellationToken);
         return NoContent();
     }
 
@@ -261,18 +238,10 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<ActionResult<Guid>> CreateCategory([FromBody] CreateMenuCategoryRequest request, CancellationToken cancellationToken)
     {
-        var category = new MenuCategory
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantContext.TenantId!.Value,
-            Name = request.Name.Trim(),
-            SortOrder = request.SortOrder
-        };
+        var trimmedRequest = request with { Name = request.Name.Trim() };
+        var categoryId = await restaurantAdminService.CreateMenuCategoryAsync(tenantContext.TenantId!.Value, trimmedRequest, cancellationToken);
 
-        dbContext.MenuCategories.Add(category);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        return CreatedAtAction(nameof(GetCurrent), new { }, category.Id);
+        return CreatedAtAction(nameof(GetCurrent), new { }, categoryId);
     }
 
     [HttpPost("menu/items")]
@@ -280,28 +249,15 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<ActionResult<Guid>> CreateMenuItem([FromBody] CreateMenuItemRequest request, CancellationToken cancellationToken)
     {
-        var categoryExists = await dbContext.MenuCategories.AnyAsync(x => x.Id == request.CategoryId, cancellationToken);
-        if (!categoryExists)
+        var trimmedRequest = request with { Name = request.Name.Trim(), Description = request.Description.Trim() };
+        var result = await restaurantAdminService.CreateMenuItemAsync(tenantContext.TenantId!.Value, trimmedRequest, cancellationToken);
+
+        if (result.Status == MenuItemMutationStatus.CategoryInvalid)
         {
             return BadRequest(new { Error = "Category does not exist for this tenant." });
         }
 
-        var item = new MenuItem
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantContext.TenantId!.Value,
-            CategoryId = request.CategoryId,
-            Name = request.Name.Trim(),
-            Description = request.Description.Trim(),
-            Price = request.Price,
-            IsAvailable = request.IsAvailable,
-            SortOrder = request.SortOrder
-        };
-
-        dbContext.MenuItems.Add(item);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        return CreatedAtAction(nameof(GetCurrent), new { }, item.Id);
+        return CreatedAtAction(nameof(GetCurrent), new { }, result.ItemId);
     }
 
     [HttpGet("hours/date-specific")]
@@ -346,18 +302,10 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<IActionResult> DeleteCategory(Guid id, CancellationToken cancellationToken)
     {
-        var category = await dbContext.MenuCategories
-            .SingleOrDefaultAsync(x => x.Id == id && x.TenantId == tenantContext.TenantId!.Value, cancellationToken);
-        if (category is null)
+        var deleted = await restaurantAdminService.DeleteMenuCategoryAsync(tenantContext.TenantId!.Value, id, cancellationToken);
+        if (!deleted)
             return NotFound();
 
-        var items = await dbContext.MenuItems
-            .Where(x => x.CategoryId == id)
-            .ToListAsync(cancellationToken);
-
-        dbContext.MenuItems.RemoveRange(items);
-        dbContext.MenuCategories.Remove(category);
-        await dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
 
@@ -366,13 +314,10 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<IActionResult> DeleteMenuItem(Guid id, CancellationToken cancellationToken)
     {
-        var item = await dbContext.MenuItems
-            .SingleOrDefaultAsync(x => x.Id == id && x.TenantId == tenantContext.TenantId!.Value, cancellationToken);
-        if (item is null)
+        var deleted = await restaurantAdminService.DeleteMenuItemAsync(tenantContext.TenantId!.Value, id, cancellationToken);
+        if (!deleted)
             return NotFound();
 
-        dbContext.MenuItems.Remove(item);
-        await dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
 
@@ -381,23 +326,15 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<IActionResult> UpdateMenuItem(Guid id, [FromBody] UpdateMenuItemRequest request, CancellationToken cancellationToken)
     {
-        var item = await dbContext.MenuItems
-            .SingleOrDefaultAsync(x => x.Id == id && x.TenantId == tenantContext.TenantId!.Value, cancellationToken);
-        if (item is null)
+        var trimmedRequest = request with { Name = request.Name.Trim(), Description = request.Description.Trim() };
+        var result = await restaurantAdminService.UpdateMenuItemAsync(tenantContext.TenantId!.Value, id, trimmedRequest, cancellationToken);
+
+        if (result.Status == MenuItemMutationStatus.NotFound)
             return NotFound();
 
-        var categoryExists = await dbContext.MenuCategories
-            .AnyAsync(x => x.Id == request.CategoryId && x.TenantId == tenantContext.TenantId!.Value, cancellationToken);
-        if (!categoryExists)
+        if (result.Status == MenuItemMutationStatus.CategoryInvalid)
             return BadRequest(new { Error = "Category does not exist for this tenant." });
 
-        item.CategoryId = request.CategoryId;
-        item.Name = request.Name.Trim();
-        item.Description = request.Description.Trim();
-        item.Price = request.Price;
-        item.IsAvailable = request.IsAvailable;
-        item.SortOrder = request.SortOrder;
-        await dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
 
@@ -441,81 +378,5 @@ public class AdminRestaurantController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
-    }
-
-    private async Task<PublicRestaurantResponse> BuildRestaurantResponseAsync(Guid tenantId, CancellationToken cancellationToken)
-    {
-        var profile = await dbContext.RestaurantProfiles
-            .Where(x => x.TenantId == tenantId)
-            .AsNoTracking()
-            .SingleOrDefaultAsync(cancellationToken);
-
-        if (profile is null)
-        {
-            throw new InvalidOperationException($"Restaurant profile not found for tenant {tenantId}. Provisioning may be incomplete.");
-        }
-
-        var tenant = await dbContext.Tenants
-            .AsNoTracking()
-            .SingleAsync(x => x.Id == tenantId, cancellationToken);
-
-        var categories = await dbContext.MenuCategories
-            .Where(x => x.TenantId == tenantId)
-            .AsNoTracking()
-            .OrderBy(x => x.SortOrder)
-            .ToListAsync(cancellationToken);
-
-        var items = await dbContext.MenuItems
-            .Where(x => x.TenantId == tenantId)
-            .AsNoTracking()
-            .OrderBy(x => x.SortOrder)
-            .ToListAsync(cancellationToken);
-
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-
-        var allHours = await dbContext.BusinessHours
-            .Where(x => x.TenantId == tenantId && (x.Date == null || x.Date == today))
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        var hours = allHours
-            .GroupBy(x => x.DayOfWeek)
-            .Select(g => g.FirstOrDefault(x => x.Date == today) ?? g.First(x => x.Date == null))
-            .OrderBy(x => x.DayOfWeek)
-            .ToList();
-
-        var menu = categories
-            .Select(category => new PublicMenuCategoryResponse(
-                category.Id,
-                category.Name,
-                category.SortOrder,
-                items.Where(item => item.CategoryId == category.Id)
-                    .OrderBy(item => item.SortOrder)
-                    .Select(item => new PublicMenuItemResponse(
-                        item.Id,
-                        item.Name,
-                        item.Description,
-                        item.Price,
-                        item.IsAvailable,
-                        item.SortOrder))
-                    .ToList()))
-            .ToList();
-
-        return new PublicRestaurantResponse(
-            tenant.Id,
-            tenant.Slug,
-            profile.DisplayName,
-            profile.Tagline,
-            profile.PrimaryHexColor,
-            profile.SecondaryHexColor,
-            profile.LogoUrl,
-            profile.HeroImageUrl,
-            profile.PrimaryCtaUrl,
-            menu,
-            hours.Select(hour => new BusinessHourResponse(
-                hour.DayOfWeek,
-                hour.OpenTime.ToString("HH:mm"),
-                hour.CloseTime.ToString("HH:mm"),
-                hour.IsClosed)).ToList());
     }
 }

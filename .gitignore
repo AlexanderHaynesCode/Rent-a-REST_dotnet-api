@@ -69,3 +69,4 @@ logs/
 
 # Azure
 .azure/
+RentARestaurant.Api/appsettings.Development.json

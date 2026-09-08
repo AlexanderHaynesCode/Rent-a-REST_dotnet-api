@@ -16,4 +16,6 @@ public class Tenant
     public ICollection<MenuCategory> MenuCategories { get; set; } = new List<MenuCategory>();
     public ICollection<MenuItem> MenuItems { get; set; } = new List<MenuItem>();
     public ICollection<BusinessHour> BusinessHours { get; set; } = new List<BusinessHour>();
+    public ICollection<AgentSubmission> AgentSubmissions { get; set; } = new List<AgentSubmission>();
+    public ICollection<AgentChangeAudit> AgentChangeAudits { get; set; } = new List<AgentChangeAudit>();
 }

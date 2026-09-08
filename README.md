@@ -25,13 +25,13 @@ Multi-tenant .NET 10 Web API foundation for a restaurant SaaS.
 
 ```powershell
 cd .\RentARestaurant.Api
-dotnet run --urls http://localhost:5099
+dotnet run --urls http://localhost:5000
 ```
 
 Health check:
 
 ```text
-GET http://localhost:5099/health
+GET http://localhost:5000/health
 ```
 
 ## Seeded demo tenant
@@ -85,3 +85,19 @@ Important keys:
 - Add migrations and switch connection string to Railway PostgreSQL.
 - Add request validation and integration tests.
 - Add idempotency store for webhook event IDs.
+
+
+## Useful notes about the system
+
+The 'status' column in the agent_submissions table in PostgreSQL is an int from 0 to 6, which corresponds with the AgentSubmissionStatus enum values in order:
+
+public enum AgentSubmissionStatus
+{
+    Received,
+    Translated,
+    Validated,
+    NeedsClarification,
+    Applied,
+    Rejected,
+    Failed
+}

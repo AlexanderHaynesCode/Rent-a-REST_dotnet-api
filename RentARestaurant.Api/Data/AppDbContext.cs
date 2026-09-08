@@ -15,6 +15,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
     public DbSet<MenuCategory> MenuCategories => Set<MenuCategory>();
     public DbSet<MenuItem> MenuItems => Set<MenuItem>();
     public DbSet<BusinessHour> BusinessHours => Set<BusinessHour>();
+    public DbSet<AgentSubmission> AgentSubmissions => Set<AgentSubmission>();
+    public DbSet<AgentChangeAudit> AgentChangeAudits => Set<AgentChangeAudit>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -128,6 +130,53 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
                 .WithMany(x => x.BusinessHours)
                 .HasForeignKey(x => x.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AgentSubmission>(entity =>
+        {
+            entity.ToTable("agent_submissions", "public");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.TenantId).HasColumnName("tenant_id");
+            entity.Property(x => x.Channel).HasColumnName("channel").HasMaxLength(20);
+            entity.Property(x => x.SenderIdentifier).HasColumnName("sender_identifier").HasMaxLength(320);
+            entity.Property(x => x.RawBodyText).HasColumnName("raw_body_text");
+            entity.Property(x => x.AttachmentRefs).HasColumnName("attachment_refs");
+            entity.Property(x => x.Status).HasColumnName("status");
+            entity.Property(x => x.TranslatedJson).HasColumnName("translated_json");
+            entity.Property(x => x.ValidatorConfidence).HasColumnName("validator_confidence");
+            entity.Property(x => x.RejectionReason).HasColumnName("rejection_reason").HasMaxLength(1000);
+            entity.Property(x => x.ReceivedUtc).HasColumnName("received_utc");
+            entity.Property(x => x.UpdatedUtc).HasColumnName("updated_utc");
+            entity.HasOne(x => x.Tenant)
+                .WithMany(x => x.AgentSubmissions)
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AgentChangeAudit>(entity =>
+        {
+            entity.ToTable("agent_change_audits", "public");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.TenantId, x.RollbackExpiresUtc });
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.TenantId).HasColumnName("tenant_id");
+            entity.Property(x => x.SubmissionId).HasColumnName("submission_id");
+            entity.Property(x => x.PreChangeSnapshotJson).HasColumnName("pre_change_snapshot_json");
+            entity.Property(x => x.DiffSummaryJson).HasColumnName("diff_summary_json");
+            entity.Property(x => x.AppliedUtc).HasColumnName("applied_utc");
+            entity.Property(x => x.RollbackExpiresUtc).HasColumnName("rollback_expires_utc");
+            entity.Property(x => x.RolledBack).HasColumnName("rolled_back");
+            entity.Property(x => x.RolledBackUtc).HasColumnName("rolled_back_utc");
+            entity.HasOne(x => x.Tenant)
+                .WithMany(x => x.AgentChangeAudits)
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Submission)
+                .WithMany()
+                .HasForeignKey(x => x.SubmissionId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         ApplyTenantQueryFilters(modelBuilder);
