@@ -1,33 +1,26 @@
-using System.Net;
-using System.Net.Mail;
 using Microsoft.Extensions.Options;
+using Resend;
 
 namespace RentARestaurant.Api.Infrastructure.Email;
 
-public class SmtpEmailService(
+public class ResendEmailService(
+    IResend resend,
     IOptions<EmailOptions> options,
-    ILogger<SmtpEmailService> logger) : IEmailService
+    ILogger<ResendEmailService> logger) : IEmailService
 {
-    private const string AdminUrl = "admin.rentaurants.com";  //"https://rent-a-rest-admin-client-app.pages.dev/login";
-    private const string RestaurantBaseUrl = "menu.rentaurants.com";  // "https://rent-a-rest-restaurant-client-app.pages.dev";
+    private const string AdminUrl = "admin.rentaurants.com";
+    private const string RestaurantBaseUrl = "menu.rentaurants.com";
 
     public async Task SendWelcomeEmailAsync(string toEmail, string restaurantName, string slug, CancellationToken cancellationToken)
     {
         var opts = options.Value;
         var restaurantUrl = $"{RestaurantBaseUrl}/{slug}";
 
-        using var client = new SmtpClient(opts.Host, opts.Port)
+        var message = new EmailMessage
         {
-            EnableSsl = opts.EnableSsl,
-            Credentials = new NetworkCredential(opts.Username, opts.Password)
-        };
-
-        using var message = new MailMessage
-        {
-            From = new MailAddress(opts.FromAddress, opts.FromName),
+            From = $"{opts.FromName} <{opts.FromAddress}>",
             Subject = $"Welcome to Rent-a-RESTaurant \u2014 {restaurantName} is live!",
-            IsBodyHtml = true,
-            Body = $"""
+            HtmlBody = $"""
                 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
                   <h2>Welcome to Rent-a-RESTaurant!</h2>
                   <p>Your restaurant <strong>{restaurantName}</strong> has been successfully provisioned.</p>
@@ -43,7 +36,7 @@ public class SmtpEmailService(
         };
         message.To.Add(toEmail);
 
-        await client.SendMailAsync(message, cancellationToken);
+        await resend.EmailSendAsync(message, cancellationToken);
         logger.LogInformation("Welcome email sent to {Email} for restaurant {Slug}", toEmail, slug);
     }
 
@@ -56,21 +49,13 @@ public class SmtpEmailService(
         CancellationToken cancellationToken)
     {
         var opts = options.Value;
-
-        using var client = new SmtpClient(opts.Host, opts.Port)
-        {
-            EnableSsl = opts.EnableSsl,
-            Credentials = new NetworkCredential(opts.Username, opts.Password)
-        };
-
         var summaryHtml = string.Join(string.Empty, appliedSummary.Select(line => $"<li>{System.Net.WebUtility.HtmlEncode(line)}</li>"));
 
-        using var message = new MailMessage
+        var message = new EmailMessage
         {
-            From = new MailAddress(opts.FromAddress, opts.FromName),
+            From = $"{opts.FromName} <{opts.FromAddress}>",
             Subject = $"Your website has been updated \u2014 {restaurantName}",
-            IsBodyHtml = true,
-            Body = $"""
+            HtmlBody = $"""
                 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
                   <h2>Your website updates are live!</h2>
                   <p>We applied the following changes to <strong>{restaurantName}</strong> automatically:</p>
@@ -85,7 +70,7 @@ public class SmtpEmailService(
         };
         message.To.Add(toEmail);
 
-        await client.SendMailAsync(message, cancellationToken);
+        await resend.EmailSendAsync(message, cancellationToken);
         logger.LogInformation("Agent-applied-changes email sent to {Email} for audit {AuditId}", toEmail, auditId);
     }
 
@@ -96,21 +81,13 @@ public class SmtpEmailService(
         CancellationToken cancellationToken)
     {
         var opts = options.Value;
-
-        using var client = new SmtpClient(opts.Host, opts.Port)
-        {
-            EnableSsl = opts.EnableSsl,
-            Credentials = new NetworkCredential(opts.Username, opts.Password)
-        };
-
         var questionsHtml = string.Join(string.Empty, clarificationQuestions.Select(q => $"<li>{System.Net.WebUtility.HtmlEncode(q)}</li>"));
 
-        using var message = new MailMessage
+        var message = new EmailMessage
         {
-            From = new MailAddress(opts.FromAddress, opts.FromName),
+            From = $"{opts.FromName} <{opts.FromAddress}>",
             Subject = $"We need a bit more info to update your website \u2014 {restaurantName}",
-            IsBodyHtml = true,
-            Body = $"""
+            HtmlBody = $"""
                 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
                   <h2>Almost there!</h2>
                   <p>We received your update request for <strong>{restaurantName}</strong>, but need clarification before applying it:</p>
@@ -124,7 +101,7 @@ public class SmtpEmailService(
         };
         message.To.Add(toEmail);
 
-        await client.SendMailAsync(message, cancellationToken);
+        await resend.EmailSendAsync(message, cancellationToken);
         logger.LogInformation("Agent-clarification-needed email sent to {Email}", toEmail);
     }
 }

@@ -7,6 +7,7 @@ using RentARestaurant.Api.Infrastructure.Storage;
 using RentARestaurant.Api.Infrastructure.Stripe;
 using RentARestaurant.Api.Infrastructure.Tenancy;
 using RentARestaurant.Api.Services;
+using Resend;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,9 +32,14 @@ builder.Services.Configure<AgentOptions>(
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("PostgreSQLConnection")));
 
+builder.Services.AddResend(o =>
+{
+    o.ApiToken = builder.Configuration["Email:ApiKey"] ?? string.Empty;
+});
+
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
-builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+builder.Services.AddScoped<IEmailService, ResendEmailService>();
 builder.Services.AddScoped<IMediaNamespaceProvisioner, LocalMediaNamespaceProvisioner>();
 builder.Services.AddScoped<ITenantAccessService, TenantAccessService>();
 builder.Services.AddScoped<IRestaurantAdminService, RestaurantAdminService>();
