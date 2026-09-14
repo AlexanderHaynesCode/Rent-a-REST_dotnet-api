@@ -19,10 +19,10 @@ public class ResendEmailService(
         var message = new EmailMessage
         {
             From = $"{opts.FromName} <{opts.FromAddress}>",
-            Subject = $"Welcome to Rent-a-RESTaurant \u2014 {restaurantName} is live!",
+            Subject = $"Welcome to Rentaurants \u2014 {restaurantName} is live!",
             HtmlBody = $"""
                 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
-                  <h2>Welcome to Rent-a-RESTaurant!</h2>
+                  <h2>Welcome to Rentaurants!</h2>
                   <p>Your restaurant <strong>{restaurantName}</strong> has been successfully provisioned.</p>
                   <p>Here are your links:</p>
                   <ul>
@@ -30,7 +30,7 @@ public class ResendEmailService(
                     <li><strong>Your Restaurant Page:</strong> <a href="{restaurantUrl}">{restaurantUrl}</a></li>
                   </ul>
                   <p>Welcome aboard!</p>
-                  <p>The Rent-a-RESTaurant Team</p>
+                  <p>The Rentaurants Team</p>
                 </div>
                 """
         };
@@ -54,7 +54,7 @@ public class ResendEmailService(
         var message = new EmailMessage
         {
             From = $"{opts.FromName} <{opts.FromAddress}>",
-            Subject = $"Your website has been updated \u2014 {restaurantName}",
+            Subject = $"Your Rentaurants website has been updated \u2014 {restaurantName}",
             HtmlBody = $"""
                 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
                   <h2>Your website updates are live!</h2>
@@ -64,7 +64,7 @@ public class ResendEmailService(
                   </ul>
                   <p>If something doesn't look right, reply to this email and we'll help, or these changes can be
                   rolled back until <strong>{rollbackExpiresUtc:yyyy-MM-dd}</strong> (reference: {auditId}).</p>
-                  <p>The Rent-a-RESTaurant Team</p>
+                  <p>The Rentaurants Team</p>
                 </div>
                 """
         };
@@ -95,7 +95,7 @@ public class ResendEmailService(
                     {questionsHtml}
                   </ul>
                   <p>Just reply to this email (or your original message) with the details, and we'll take care of the rest.</p>
-                  <p>The Rent-a-RESTaurant Team</p>
+                  <p>The Rentaurants Team</p>
                 </div>
                 """
         };
