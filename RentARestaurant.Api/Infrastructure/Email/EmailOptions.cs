@@ -6,5 +6,5 @@ public sealed class EmailOptions
 
     public string ApiKey { get; set; } = string.Empty;
     public string FromAddress { get; set; } = string.Empty;
-    public string FromName { get; set; } = "Rent-a-RESTaurant";
+    public string FromName { get; set; } = "Rentaurants";
 }
