@@ -65,6 +65,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.TenantId).HasColumnName("tenant_id");
             entity.Property(x => x.DisplayName).HasColumnName("display_name").HasMaxLength(200);
             entity.Property(x => x.Tagline).HasColumnName("tagline").HasMaxLength(300);
+            entity.Property(x => x.Announcement).HasColumnName("announcement").HasMaxLength(300);
             entity.Property(x => x.PrimaryHexColor).HasColumnName("primary_hex_color").HasMaxLength(12);
             entity.Property(x => x.SecondaryHexColor).HasColumnName("secondary_hex_color").HasMaxLength(12);
             entity.Property(x => x.LogoUrl).HasColumnName("logo_url");

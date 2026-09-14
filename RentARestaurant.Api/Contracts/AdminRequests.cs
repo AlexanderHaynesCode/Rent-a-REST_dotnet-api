@@ -3,6 +3,7 @@ namespace RentARestaurant.Api.Contracts;
 public sealed record UpdateBrandingRequest(
     string DisplayName,
     string Tagline,
+    string Announcement,
     string PrimaryHexColor,
     string SecondaryHexColor,
     string? LogoUrl,

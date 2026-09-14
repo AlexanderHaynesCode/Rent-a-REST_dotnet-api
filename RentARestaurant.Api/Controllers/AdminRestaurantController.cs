@@ -80,6 +80,7 @@ public class AdminRestaurantController(
         {
             DisplayName = request.DisplayName.Trim(),
             Tagline = request.Tagline.Trim(),
+            Announcement = request.Announcement.Trim(),
             PrimaryHexColor = request.PrimaryHexColor.Trim(),
             SecondaryHexColor = request.SecondaryHexColor.Trim(),
             LogoUrl = request.LogoUrl?.Trim(),

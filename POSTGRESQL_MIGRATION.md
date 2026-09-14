@@ -77,6 +77,7 @@ CREATE TABLE restaurant_profiles (
     tenant_id UUID NOT NULL UNIQUE,
     display_name VARCHAR(200) NOT NULL,
     tagline TEXT NOT NULL DEFAULT '',
+    announcement TEXT NOT NULL DEFAULT '',
     primary_hex_color VARCHAR(12) NOT NULL DEFAULT '#222222',
     secondary_hex_color VARCHAR(12) NOT NULL DEFAULT '#adadad',
     logo_url TEXT,
@@ -94,6 +95,13 @@ CREATE INDEX idx_restaurant_profiles_updated_utc ON restaurant_profiles(updated_
 ```
 
 **Note:** `RestaurantProfile.PrimaryHexColor`/`SecondaryHexColor` are configured with `HasMaxLength(12)` in `AppDbContext`, so `VARCHAR(7)` was too tight and would reject any EF-validated value longer than 7 chars. Widened to 12 and the CHECK now also accepts 8-digit hex (with alpha channel).
+
+**For existing databases, add the new headline column manually:**
+
+```sql
+ALTER TABLE restaurant_profiles
+ADD COLUMN announcement TEXT NOT NULL DEFAULT '';
+```
 
 ---
 

@@ -5,6 +5,7 @@ public sealed record PublicRestaurantResponse(
     string Slug,
     string DisplayName,
     string Tagline,
+    string Announcement,
     string PrimaryHexColor,
     string SecondaryHexColor,
     string? LogoUrl,

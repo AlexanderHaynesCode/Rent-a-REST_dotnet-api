@@ -182,6 +182,7 @@ public class AgentRestaurantController(
         var merged = new UpdateBrandingRequest(
             branding.DisplayName ?? profile.DisplayName,
             branding.Tagline ?? profile.Tagline,
+            branding.Announcement ?? profile.Announcement,
             branding.PrimaryHexColor ?? profile.PrimaryHexColor,
             branding.SecondaryHexColor ?? profile.SecondaryHexColor,
             branding.LogoUrl ?? profile.LogoUrl,

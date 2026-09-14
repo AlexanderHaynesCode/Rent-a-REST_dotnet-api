@@ -33,6 +33,7 @@ public sealed record AgentHoursChange(
 public sealed record AgentBrandingChange(
     string? DisplayName,
     string? Tagline,
+    string? Announcement,
     string? PrimaryHexColor,
     string? SecondaryHexColor,
     string? LogoUrl,

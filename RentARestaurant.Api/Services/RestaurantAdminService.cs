@@ -108,6 +108,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             tenant.Slug,
             profile.DisplayName,
             profile.Tagline,
+            profile.Announcement,
             profile.PrimaryHexColor,
             profile.SecondaryHexColor,
             profile.LogoUrl,
@@ -133,6 +134,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
 
         profile.DisplayName = request.DisplayName;
         profile.Tagline = request.Tagline;
+        profile.Announcement = request.Announcement;
         profile.PrimaryHexColor = request.PrimaryHexColor;
         profile.SecondaryHexColor = request.SecondaryHexColor;
         profile.LogoUrl = request.LogoUrl;
@@ -308,6 +310,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         {
             profile.DisplayName = snapshot.DisplayName;
             profile.Tagline = snapshot.Tagline;
+            profile.Announcement = snapshot.Announcement;
             profile.PrimaryHexColor = snapshot.PrimaryHexColor;
             profile.SecondaryHexColor = snapshot.SecondaryHexColor;
             profile.LogoUrl = snapshot.LogoUrl;

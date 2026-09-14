@@ -82,6 +82,7 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             tenant.Slug,
             profile.DisplayName,
             profile.Tagline,
+            profile.Announcement,
             profile.PrimaryHexColor,
             profile.SecondaryHexColor,
             profile.LogoUrl,

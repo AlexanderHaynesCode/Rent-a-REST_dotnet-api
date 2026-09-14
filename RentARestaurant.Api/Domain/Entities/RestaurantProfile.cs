@@ -8,6 +8,7 @@ public class RestaurantProfile : ITenantEntity
     public Guid TenantId { get; set; }
     public string DisplayName { get; set; } = string.Empty;
     public string Tagline { get; set; } = string.Empty;
+    public string Announcement { get; set; } = string.Empty;
     public string PrimaryHexColor { get; set; } = "#222222";
     public string SecondaryHexColor { get; set; } = "#ffffff";
     public string? LogoUrl { get; set; }
