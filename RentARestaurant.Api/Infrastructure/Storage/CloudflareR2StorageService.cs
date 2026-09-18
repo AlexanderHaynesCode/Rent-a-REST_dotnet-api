@@ -47,4 +47,20 @@ public class CloudflareR2StorageService : IR2StorageService
 
         return $"{_options.PublicBaseUrl.TrimEnd('/')}/tenants/{tenantId:D}/{imageType}";
     }
+
+    public async Task DeleteImageAsync(
+        Guid tenantId,
+        string imageType,
+        CancellationToken cancellationToken = default)
+    {
+        var key = $"tenants/{tenantId:D}/{imageType}";
+
+        var request = new DeleteObjectRequest
+        {
+            BucketName = _options.BucketName,
+            Key = key
+        };
+
+        await _s3Client.DeleteObjectAsync(request, cancellationToken);
+    }
 }

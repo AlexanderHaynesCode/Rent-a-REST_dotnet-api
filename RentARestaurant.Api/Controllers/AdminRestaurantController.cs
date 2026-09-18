@@ -172,8 +172,8 @@ public class AdminRestaurantController(
         IFormFile file,
         CancellationToken cancellationToken)
     {
-        var allowedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "logo", "hero", "primary-cta" };
-        if (!allowedTypes.Contains(imageType))
+        var normalizedImageType = imageType.Trim();
+        if (!IsSupportedBrandingImageType(normalizedImageType))
         {
             return BadRequest(new { Error = "imageType must be one of: logo, hero, primary-cta." });
         }
@@ -209,7 +209,7 @@ public class AdminRestaurantController(
             {
                 url = await r2StorageService.UploadImageAsync(
                     tenantContext.TenantId!.Value,
-                    imageType,
+                    normalizedImageType,
                     stream,
                     file.ContentType,
                     cancellationToken);
@@ -220,18 +220,51 @@ public class AdminRestaurantController(
             return StatusCode(StatusCodes.Status500InternalServerError, new { Error = "Failed to upload image.", Details = ex.Message });
         }
         
-
-        switch (imageType)
-        {
-            case "logo":       profile.LogoUrl = url;       break;
-            case "hero":       profile.HeroImageUrl = url;  break;
-            case "primary-cta": profile.PrimaryCtaUrl = url; break;
-        }
+        SetBrandingImageUrl(profile, normalizedImageType, url);
 
         profile.UpdatedUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new { url });
+    }
+
+    [HttpDelete("images/{imageType}")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> DeleteBrandingImage(
+        string imageType,
+        CancellationToken cancellationToken)
+    {
+        var normalizedImageType = imageType.Trim();
+        if (!IsSupportedBrandingImageType(normalizedImageType))
+        {
+            return BadRequest(new { Error = "imageType must be one of: logo, hero, primary-cta." });
+        }
+
+        var profile = await dbContext.RestaurantProfiles
+            .SingleOrDefaultAsync(x => x.TenantId == tenantContext.TenantId!.Value, cancellationToken);
+        if (profile is null)
+        {
+            return NotFound();
+        }
+
+        try
+        {
+            await r2StorageService.DeleteImageAsync(
+                tenantContext.TenantId!.Value,
+                normalizedImageType,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { Error = "Failed to delete image.", Details = ex.Message });
+        }
+
+        SetBrandingImageUrl(profile, normalizedImageType, null);
+        profile.UpdatedUtc = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return NoContent();
     }
 
     [HttpPost("menu/categories")]
@@ -379,5 +412,26 @@ public class AdminRestaurantController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
+    }
+
+    private static bool IsSupportedBrandingImageType(string imageType) =>
+        imageType.Equals("logo", StringComparison.OrdinalIgnoreCase) ||
+        imageType.Equals("hero", StringComparison.OrdinalIgnoreCase) ||
+        imageType.Equals("primary-cta", StringComparison.OrdinalIgnoreCase);
+
+    private static void SetBrandingImageUrl(RestaurantProfile profile, string imageType, string? url)
+    {
+        switch (imageType.ToLowerInvariant())
+        {
+            case "logo":
+                profile.LogoUrl = url;
+                break;
+            case "hero":
+                profile.HeroImageUrl = url;
+                break;
+            case "primary-cta":
+                profile.PrimaryCtaUrl = url;
+                break;
+        }
     }
 }

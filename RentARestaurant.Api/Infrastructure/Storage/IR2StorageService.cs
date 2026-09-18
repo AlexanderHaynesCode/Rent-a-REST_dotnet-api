@@ -8,4 +8,9 @@ public interface IR2StorageService
         Stream stream,
         string contentType,
         CancellationToken cancellationToken = default);
+
+    Task DeleteImageAsync(
+        Guid tenantId,
+        string imageType,
+        CancellationToken cancellationToken = default);
 }
