@@ -70,6 +70,8 @@ public class TenantProvisioningService(
             Name = request.RestaurantName.Trim(),
             Slug = slug,
             CustomDomain = request.CustomDomain,
+            StripeCustomerId = string.IsNullOrWhiteSpace(request.StripeCustomerId) ? null : request.StripeCustomerId.Trim(),
+            StripeSubscriptionId = string.IsNullOrWhiteSpace(request.StripeSubscriptionId) ? null : request.StripeSubscriptionId.Trim(),
             IsActive = true,
             SubscriptionPlan = normalizedPlan,
             SubscriptionState = string.IsNullOrWhiteSpace(request.StripeSubscriptionId) ? "trialing" : "active"

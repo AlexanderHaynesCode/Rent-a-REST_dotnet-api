@@ -17,6 +17,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
     public DbSet<BusinessHour> BusinessHours => Set<BusinessHour>();
     public DbSet<AgentSubmission> AgentSubmissions => Set<AgentSubmission>();
     public DbSet<AgentChangeAudit> AgentChangeAudits => Set<AgentChangeAudit>();
+    public DbSet<ProvisioningSession> ProvisioningSessions => Set<ProvisioningSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,10 +29,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.Slug).IsUnique();
             entity.HasIndex(x => x.CustomDomain).IsUnique();
+            entity.HasIndex(x => x.StripeCustomerId).IsUnique();
+            entity.HasIndex(x => x.StripeSubscriptionId).IsUnique();
             entity.Property(x => x.Id).HasColumnName("id");
             entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(200);
             entity.Property(x => x.Slug).HasColumnName("slug").HasMaxLength(120);
             entity.Property(x => x.CustomDomain).HasColumnName("custom_domain").HasMaxLength(255);
+            entity.Property(x => x.StripeCustomerId).HasColumnName("stripe_customer_id").HasMaxLength(100);
+            entity.Property(x => x.StripeSubscriptionId).HasColumnName("stripe_subscription_id").HasMaxLength(100);
             entity.Property(x => x.IsActive).HasColumnName("is_active");
             entity.Property(x => x.SubscriptionPlan).HasColumnName("subscription_plan").HasMaxLength(50);
             entity.Property(x => x.SubscriptionState).HasColumnName("subscription_state").HasMaxLength(50);
@@ -178,6 +183,30 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
                 .WithMany()
                 .HasForeignKey(x => x.SubmissionId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ProvisioningSession>(entity =>
+        {
+            entity.ToTable("provisioning_sessions", "public");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.CheckoutSessionId).IsUnique();
+            entity.HasIndex(x => x.TenantId).IsUnique();
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.CheckoutSessionId).HasColumnName("checkout_session_id").HasMaxLength(255);
+            entity.Property(x => x.RestaurantName).HasColumnName("restaurant_name").HasMaxLength(200);
+            entity.Property(x => x.OwnerEmail).HasColumnName("owner_email").HasMaxLength(320);
+            entity.Property(x => x.OwnerExternalUserId).HasColumnName("owner_external_user_id").HasMaxLength(255);
+            entity.Property(x => x.SubscriptionPlan).HasColumnName("subscription_plan").HasMaxLength(50);
+            entity.Property(x => x.RequestedSlug).HasColumnName("requested_slug").HasMaxLength(120);
+            entity.Property(x => x.CustomDomain).HasColumnName("custom_domain").HasMaxLength(255);
+            entity.Property(x => x.Status).HasColumnName("status").HasMaxLength(40);
+            entity.Property(x => x.StripeCustomerId).HasColumnName("stripe_customer_id").HasMaxLength(100);
+            entity.Property(x => x.StripeSubscriptionId).HasColumnName("stripe_subscription_id").HasMaxLength(100);
+            entity.Property(x => x.TenantId).HasColumnName("tenant_id");
+            entity.Property(x => x.TenantSlug).HasColumnName("tenant_slug").HasMaxLength(120);
+            entity.Property(x => x.FailureReason).HasColumnName("failure_reason").HasMaxLength(1000);
+            entity.Property(x => x.CreatedUtc).HasColumnName("created_utc");
+            entity.Property(x => x.UpdatedUtc).HasColumnName("updated_utc");
         });
 
         ApplyTenantQueryFilters(modelBuilder);

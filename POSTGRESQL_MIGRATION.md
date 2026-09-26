@@ -28,7 +28,8 @@ Tenant (1) ──────── (1) RestaurantProfile
   │
   ├──── (1:N) TenantUser
   ├──── (1:N) MenuCategory ──── (1:N) MenuItem
-  └──── (1:N) BusinessHour
+    ├──── (1:N) BusinessHour
+    └──── (1:N) ProvisioningSession
 ```
 
 ---
@@ -65,11 +66,56 @@ CREATE INDEX idx_tenants_is_active ON tenants(is_active);
 CREATE INDEX idx_tenants_created_utc ON tenants(created_utc);
 ```
 
+**Stripe integration columns:**
+
+If you want to persist the Stripe customer and subscription identifiers on the tenant row, add these columns and indexes:
+
+```sql
+ALTER TABLE tenants
+ADD COLUMN stripe_customer_id VARCHAR(100),
+ADD COLUMN stripe_subscription_id VARCHAR(100);
+
+CREATE UNIQUE INDEX idx_tenants_stripe_customer_id ON tenants(stripe_customer_id);
+CREATE UNIQUE INDEX idx_tenants_stripe_subscription_id ON tenants(stripe_subscription_id);
+```
+
 **Note:** `custom_domain` needs a unique index because `Tenant.CustomDomain` is configured with `HasIndex(x => x.CustomDomain).IsUnique()` in `AppDbContext`. Postgres unique indexes allow multiple `NULL` values, so tenants without a custom domain are unaffected.
 
 ---
 
-### 2. RestaurantProfiles Table
+### 2. ProvisioningSessions Table
+
+```sql
+CREATE TABLE provisioning_sessions (
+    id UUID PRIMARY KEY,
+    checkout_session_id VARCHAR(255) UNIQUE,
+    restaurant_name VARCHAR(200) NOT NULL,
+    owner_email VARCHAR(320) NOT NULL,
+    owner_external_user_id VARCHAR(255) NOT NULL,
+    subscription_plan VARCHAR(50) NOT NULL,
+    requested_slug VARCHAR(120),
+    custom_domain VARCHAR(255),
+    status VARCHAR(40) NOT NULL DEFAULT 'pending_payment',
+    stripe_customer_id VARCHAR(100),
+    stripe_subscription_id VARCHAR(100),
+    tenant_id UUID UNIQUE,
+    tenant_slug VARCHAR(120),
+    failure_reason TEXT,
+    created_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_provisioning_sessions_status ON provisioning_sessions(status);
+CREATE INDEX idx_provisioning_sessions_owner_email ON provisioning_sessions(owner_email);
+```
+
+This table is only for live Stripe provisioning. It lets the API map a Stripe Checkout session id back to the tenant signup record while the webhook finishes provisioning.
+
+---
+
+### 3. RestaurantProfiles Table
 
 ```sql
 CREATE TABLE restaurant_profiles (
@@ -105,7 +151,7 @@ ADD COLUMN announcement TEXT NOT NULL DEFAULT '';
 
 ---
 
-### 3. TenantUsers Table
+### 4. TenantUsers Table
 
 ```sql
 CREATE TABLE tenant_users (
@@ -134,7 +180,7 @@ CREATE INDEX idx_tenant_users_created_utc ON tenant_users(created_utc);
 
 ---
 
-### 4. MenuCategories Table
+### 5. MenuCategories Table
 
 ```sql
 CREATE TABLE menu_categories (
@@ -156,7 +202,7 @@ CREATE INDEX idx_menu_categories_sort_order ON menu_categories(tenant_id, sort_o
 
 ---
 
-### 5. MenuItems Table
+### 6. MenuItems Table
 
 ```sql
 CREATE TABLE menu_items (

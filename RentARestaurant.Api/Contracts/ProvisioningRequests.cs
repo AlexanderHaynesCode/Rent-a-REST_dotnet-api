@@ -6,6 +6,9 @@ public static class SubscriptionPlans
 {
     public const string SelfService = "Self-Service";
     public const string DoneForYou = "Done-For-You";
+
+    // Fixed monthly prices matching the Stripe Dashboard Prices configured in Phase 0.
+    public static decimal GetMonthlyPriceUsd(string plan) => plan == DoneForYou ? 199.99m : 29.99m;
 }
 
 public sealed record ProvisionTenantRequest(

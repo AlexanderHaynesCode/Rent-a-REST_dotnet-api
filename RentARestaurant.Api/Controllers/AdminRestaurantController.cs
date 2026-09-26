@@ -60,6 +60,7 @@ public class AdminRestaurantController(
                     resolution.Tenant.Name,
                     resolution.Tenant.CustomDomain,
                     resolution.Tenant.IsActive,
+                    resolution.Tenant.SubscriptionPlan,
                     resolution.Tenant.SubscriptionState),
                 restaurant);
 
@@ -69,6 +70,40 @@ public class AdminRestaurantController(
         {
             return StatusCode(StatusCodes.Status500InternalServerError, new { Error = "DERP An unexpected error occurred during bootstrap.", Details = ex.Message });
         }        
+    }
+
+    [HttpPut("subscription")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<ActionResult<AdminTenantSummaryResponse>> UpdateSubscription(
+        [FromBody] UpdateSubscriptionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var tenant = await dbContext.Tenants
+            .SingleOrDefaultAsync(x => x.Id == tenantContext.TenantId!.Value, cancellationToken);
+
+        if (tenant is null)
+        {
+            return NotFound(new { Error = "Tenant not found." });
+        }
+
+        tenant.SubscriptionPlan = request.SubscriptionPlan.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.SubscriptionState))
+        {
+            tenant.SubscriptionState = request.SubscriptionState.Trim();
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new AdminTenantSummaryResponse(
+            tenant.Id,
+            tenant.Slug,
+            tenant.Name,
+            tenant.CustomDomain,
+            tenant.IsActive,
+            tenant.SubscriptionPlan,
+            tenant.SubscriptionState));
     }
 
     [HttpPut("branding")]

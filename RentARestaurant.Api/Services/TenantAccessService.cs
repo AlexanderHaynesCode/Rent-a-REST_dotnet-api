@@ -39,6 +39,7 @@ public class TenantAccessService(AppDbContext dbContext) : ITenantAccessService
                     tenant.Name,
                     tenant.CustomDomain,
                     tenant.IsActive,
+                    tenant.SubscriptionPlan,
                     tenant.SubscriptionState))
             .ToListAsync(cancellationToken);
 

@@ -21,6 +21,7 @@ public sealed record ResolvedTenantAccess(
     string Name,
     string? CustomDomain,
     bool IsActive,
+    string SubscriptionPlan,
     string SubscriptionState);
 
 public sealed record TenantResolutionResult(

@@ -17,6 +17,8 @@ builder.Services.Configure<LocalMediaStorageOptions>(
     builder.Configuration.GetSection(LocalMediaStorageOptions.SectionName));
 builder.Services.Configure<StripeOptions>(
     builder.Configuration.GetSection(StripeOptions.SectionName));
+builder.Services.Configure<MarketingOptions>(
+    builder.Configuration.GetSection(MarketingOptions.SectionName));
 builder.Services.Configure<ProvisioningOptions>(
     builder.Configuration.GetSection(ProvisioningOptions.SectionName));
 builder.Services.Configure<EmailOptions>(
@@ -37,13 +39,19 @@ builder.Services.AddResend(o =>
     o.ApiToken = builder.Configuration["Email:ApiKey"] ?? string.Empty;
 });
 
+builder.Services.AddHttpClient();
+
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();
 builder.Services.AddScoped<IEmailService, ResendEmailService>();
 builder.Services.AddScoped<IMediaNamespaceProvisioner, LocalMediaNamespaceProvisioner>();
 builder.Services.AddScoped<ITenantAccessService, TenantAccessService>();
 builder.Services.AddScoped<IRestaurantAdminService, RestaurantAdminService>();
+builder.Services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
+builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddSingleton<IR2StorageService, CloudflareR2StorageService>();
+
+Stripe.StripeConfiguration.ApiKey = builder.Configuration["Stripe:SecretKey"];
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();

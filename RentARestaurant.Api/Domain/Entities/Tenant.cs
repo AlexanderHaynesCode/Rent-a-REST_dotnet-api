@@ -6,6 +6,8 @@ public class Tenant
     public string Name { get; set; } = string.Empty;
     public string Slug { get; set; } = string.Empty;
     public string? CustomDomain { get; set; }
+    public string? StripeCustomerId { get; set; }
+    public string? StripeSubscriptionId { get; set; }
     public bool IsActive { get; set; } = true;
     public string SubscriptionPlan { get; set; } = "Self-Service";
     public string SubscriptionState { get; set; } = "active";
