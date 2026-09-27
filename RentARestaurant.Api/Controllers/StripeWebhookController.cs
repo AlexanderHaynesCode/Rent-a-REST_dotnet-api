@@ -21,6 +21,7 @@ public class StripeWebhookController(
     [HttpPost]
     public async Task<IActionResult> Handle(CancellationToken cancellationToken)
     {
+        logger.LogInformation("Alexxx Handling Stripe webhook request.");
         using var reader = new StreamReader(Request.Body, Encoding.UTF8);
         var rawBody = await reader.ReadToEndAsync(cancellationToken);
 
@@ -28,7 +29,7 @@ public class StripeWebhookController(
             Request.Headers["X-Stripe-Test-Trigger"].ToString().Trim(),
             "browser",
             StringComparison.OrdinalIgnoreCase);
-
+        logger.LogInformation("environment.IsDevelopment(): {IsDevelopment}", environment.IsDevelopment());
         if (environment.IsDevelopment() && browserTestTrigger)
         {
             logger.LogInformation("Accepting development browser trigger for Stripe webhook test.");
@@ -81,7 +82,7 @@ public class StripeWebhookController(
         using var document = JsonDocument.Parse(rawBody);
         var root = document.RootElement;
         var eventType = ReadString(root, "type") ?? ReadString(root, "eventType");
-
+        logger.LogInformation("Handling Stripe event of type {EventType}", eventType);
         if (!string.Equals(eventType, "checkout.session.completed", StringComparison.OrdinalIgnoreCase))
         {
             logger.LogInformation("Ignoring Stripe event type {EventType}", eventType);
