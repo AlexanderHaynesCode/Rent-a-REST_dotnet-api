@@ -57,7 +57,7 @@ X-Admin-User-Id: owner-demo
 - `POST /api/admin/restaurant/menu/categories`
 - `POST /api/admin/restaurant/menu/items`
 - `POST /api/system/provisioning/tenants`
-- `POST /api/stripe/webhooks`
+- `POST /api/stripe/webhooks` (handles `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`; subscription metadata is stored in `tenant_subscriptions`)
 
 Provisioning request payloads require `subscriptionPlan` with one of:
 

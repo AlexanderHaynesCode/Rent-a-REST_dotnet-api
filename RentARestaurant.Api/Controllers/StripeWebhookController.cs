@@ -14,6 +14,7 @@ namespace RentARestaurant.Api.Controllers;
 public class StripeWebhookController(
     ITenantProvisioningService tenantProvisioningService,
     IStripeCheckoutService stripeCheckoutService,
+    ITenantSubscriptionService tenantSubscriptionService,
     IOptions<StripeOptions> stripeOptions,
     IWebHostEnvironment environment,
     ILogger<StripeWebhookController> logger) : ControllerBase
@@ -83,6 +84,36 @@ public class StripeWebhookController(
         var root = document.RootElement;
         var eventType = ReadString(root, "type") ?? ReadString(root, "eventType");
         logger.LogInformation("Handling Stripe event of type {EventType}", eventType);
+        if (string.Equals(eventType, "customer.subscription.updated", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(eventType, "customer.subscription.deleted", StringComparison.OrdinalIgnoreCase))
+        {
+            string? subscriptionId = null;
+            if (root.TryGetProperty("data", out var subData)
+                && subData.ValueKind == JsonValueKind.Object
+                && subData.TryGetProperty("object", out var subObject)
+                && subObject.ValueKind == JsonValueKind.Object)
+            {
+                subscriptionId = ReadString(subObject, "id");
+            }
+
+            if (string.IsNullOrWhiteSpace(subscriptionId))
+            {
+                return BadRequest(new { Error = "Subscription event is missing the subscription id." });
+            }
+
+            try
+            {
+                await tenantSubscriptionService.SyncAsync(subscriptionId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to sync subscription {SubscriptionId}", subscriptionId);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { Error = "Failed to sync subscription." });
+            }
+
+            return Ok(new { Processed = true });
+        }
+
         if (!string.Equals(eventType, "checkout.session.completed", StringComparison.OrdinalIgnoreCase))
         {
             logger.LogInformation("Ignoring Stripe event type {EventType}", eventType);
@@ -143,6 +174,18 @@ public class StripeWebhookController(
                 stripeCustomerId,
                 stripeSubscriptionId,
                 cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(stripeSubscriptionId))
+            {
+                try
+                {
+                    await tenantSubscriptionService.RecordSignupAsync(result.TenantId, stripeSubscriptionId, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Tenant {TenantId} provisioned but saving subscription metadata failed", result.TenantId);
+                }
+            }
 
             return Ok(new
             {

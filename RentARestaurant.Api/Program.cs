@@ -49,6 +49,7 @@ builder.Services.AddScoped<ITenantAccessService, TenantAccessService>();
 builder.Services.AddScoped<IRestaurantAdminService, RestaurantAdminService>();
 builder.Services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+builder.Services.AddScoped<ITenantSubscriptionService, TenantSubscriptionService>();
 builder.Services.AddSingleton<IR2StorageService, CloudflareR2StorageService>();
 
 Stripe.StripeConfiguration.ApiKey = builder.Configuration["Stripe:SecretKey"];

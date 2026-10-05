@@ -18,6 +18,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
     public DbSet<AgentSubmission> AgentSubmissions => Set<AgentSubmission>();
     public DbSet<AgentChangeAudit> AgentChangeAudits => Set<AgentChangeAudit>();
     public DbSet<ProvisioningSession> ProvisioningSessions => Set<ProvisioningSession>();
+    public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -207,6 +208,44 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.FailureReason).HasColumnName("failure_reason").HasMaxLength(1000);
             entity.Property(x => x.CreatedUtc).HasColumnName("created_utc");
             entity.Property(x => x.UpdatedUtc).HasColumnName("updated_utc");
+        });
+
+        modelBuilder.Entity<TenantSubscription>(entity =>
+        {
+            entity.ToTable("tenant_subscriptions", "public");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.TenantId).IsUnique();
+            entity.HasIndex(x => x.StripeSubscriptionId).IsUnique();
+            entity.HasIndex(x => x.StripeCustomerId);
+            entity.HasIndex(x => x.Status);
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.TenantId).HasColumnName("tenant_id");
+            entity.Property(x => x.StripeCustomerId).HasColumnName("stripe_customer_id").HasMaxLength(100);
+            entity.Property(x => x.StripeSubscriptionId).HasColumnName("stripe_subscription_id").HasMaxLength(100);
+            entity.Property(x => x.StripeSubscriptionItemId).HasColumnName("stripe_subscription_item_id").HasMaxLength(100);
+            entity.Property(x => x.StripePriceId).HasColumnName("stripe_price_id").HasMaxLength(100);
+            entity.Property(x => x.Plan).HasColumnName("plan").HasMaxLength(50);
+            entity.Property(x => x.Status).HasColumnName("status").HasMaxLength(40);
+            entity.Property(x => x.MonthlyAmountCents).HasColumnName("monthly_amount_cents");
+            entity.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsFixedLength();
+            entity.Property(x => x.OnboardingFeeCents).HasColumnName("onboarding_fee_cents");
+            entity.Property(x => x.OnboardingFeePaidUtc).HasColumnName("onboarding_fee_paid_utc");
+            entity.Property(x => x.CurrentPeriodStartUtc).HasColumnName("current_period_start_utc");
+            entity.Property(x => x.CurrentPeriodEndUtc).HasColumnName("current_period_end_utc");
+            entity.Property(x => x.CancelAtPeriodEnd).HasColumnName("cancel_at_period_end");
+            entity.Property(x => x.CanceledUtc).HasColumnName("canceled_utc");
+            entity.Property(x => x.LatestInvoiceId).HasColumnName("latest_invoice_id").HasMaxLength(100);
+            entity.Property(x => x.TrialEndUtc).HasColumnName("trial_end_utc");
+            entity.Property(x => x.PendingPlan).HasColumnName("pending_plan").HasMaxLength(50);
+            entity.Property(x => x.PendingPlanEffectiveUtc).HasColumnName("pending_plan_effective_utc");
+            entity.Property(x => x.PreviousPlan).HasColumnName("previous_plan").HasMaxLength(50);
+            entity.Property(x => x.PlanChangedUtc).HasColumnName("plan_changed_utc");
+            entity.Property(x => x.CreatedUtc).HasColumnName("created_utc");
+            entity.Property(x => x.UpdatedUtc).HasColumnName("updated_utc");
+            entity.HasOne(x => x.Tenant)
+                .WithOne()
+                .HasForeignKey<TenantSubscription>(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         ApplyTenantQueryFilters(modelBuilder);

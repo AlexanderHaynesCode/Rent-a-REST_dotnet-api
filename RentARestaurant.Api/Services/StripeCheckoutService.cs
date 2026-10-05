@@ -167,7 +167,7 @@ public sealed class StripeCheckoutService(
             new("customer_email", request.OwnerEmail.Trim()),
             new("client_reference_id", provisioningSession.Id.ToString("D")),
             new("success_url", $"{marketingBaseUrl}/signup/success?session_id={{CHECKOUT_SESSION_ID}}"),
-            new("cancel_url", $"{marketingBaseUrl}/pricing?checkout=cancelled"),
+            new("cancel_url", $"{marketingBaseUrl}/"),
             new("metadata[provisioning_session_id]", provisioningSession.Id.ToString("D")),
             new("metadata[owner_email]", request.OwnerEmail.Trim()),
             new("metadata[owner_external_user_id]", request.OwnerExternalUserId.Trim()),

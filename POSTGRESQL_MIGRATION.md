@@ -30,6 +30,7 @@ Tenant (1) ──────── (1) RestaurantProfile
   ├──── (1:N) MenuCategory ──── (1:N) MenuItem
     ├──── (1:N) BusinessHour
     └──── (1:N) ProvisioningSession
+    └──── (1:1) TenantSubscription
 ```
 
 ---
@@ -112,6 +113,48 @@ CREATE INDEX idx_provisioning_sessions_owner_email ON provisioning_sessions(owne
 ```
 
 This table is only for live Stripe provisioning. It lets the API map a Stripe Checkout session id back to the tenant signup record while the webhook finishes provisioning.
+
+---
+
+### 2b. TenantSubscriptions Table
+
+Stores real Stripe subscription metadata. A row is written only after a successful signup (Stripe `checkout.session.completed` webhook), so a failed payment creates no row. Upgrades update the row immediately; downgrades are scheduled via a Stripe subscription schedule and recorded in `pending_plan` / `pending_plan_effective_utc` until the period ends. The row is kept in sync by the `customer.subscription.updated` / `customer.subscription.deleted` webhooks.
+
+```sql
+CREATE TABLE public.tenant_subscriptions (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL UNIQUE,
+    stripe_customer_id VARCHAR(100) NOT NULL,
+    stripe_subscription_id VARCHAR(100) NOT NULL UNIQUE,
+    stripe_subscription_item_id VARCHAR(100),
+    stripe_price_id VARCHAR(100) NOT NULL,
+    plan VARCHAR(50) NOT NULL,
+    status VARCHAR(40) NOT NULL,
+    monthly_amount_cents INTEGER NOT NULL,
+    currency CHAR(3) NOT NULL DEFAULT 'usd',
+    onboarding_fee_cents INTEGER NOT NULL DEFAULT 0,
+    onboarding_fee_paid_utc TIMESTAMP WITH TIME ZONE,
+    current_period_start_utc TIMESTAMP WITH TIME ZONE,
+    current_period_end_utc TIMESTAMP WITH TIME ZONE,
+    cancel_at_period_end BOOLEAN NOT NULL DEFAULT false,
+    canceled_utc TIMESTAMP WITH TIME ZONE,
+    latest_invoice_id VARCHAR(100),
+    trial_end_utc TIMESTAMP WITH TIME ZONE,
+    pending_plan VARCHAR(50),
+    pending_plan_effective_utc TIMESTAMP WITH TIME ZONE,
+    previous_plan VARCHAR(50),
+    plan_changed_utc TIMESTAMP WITH TIME ZONE,
+    created_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT tenant_subscriptions_plan_check CHECK (plan IN ('Self-Service', 'Done-For-You')),
+    CONSTRAINT tenant_subscriptions_pending_plan_check CHECK (pending_plan IS NULL OR pending_plan IN ('Self-Service', 'Done-For-You')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_tenant_subscriptions_stripe_customer_id ON tenant_subscriptions(stripe_customer_id);
+CREATE INDEX idx_tenant_subscriptions_status ON tenant_subscriptions(status);
+```
 
 ---
 

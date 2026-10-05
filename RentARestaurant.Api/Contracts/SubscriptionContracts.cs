@@ -6,7 +6,9 @@ public sealed record AdminSubscriptionResponse(
     string SubscriptionPlan,
     string SubscriptionState,
     decimal MonthlyPriceUsd,
-    bool IsLinkedToStripe);
+    bool IsLinkedToStripe,
+    string? PendingPlan = null,
+    DateTime? PendingPlanEffectiveUtc = null);
 
 public sealed record PreviewSubscriptionChangeResponse(
     string CurrentPlan,
@@ -25,4 +27,6 @@ public sealed record ChangeSubscriptionPlanRequest(
 public sealed record ChangeSubscriptionPlanResponse(
     string SubscriptionPlan,
     string SubscriptionState,
-    decimal AmountChargedUsd);
+    decimal AmountChargedUsd,
+    string? PendingPlan = null,
+    DateTime? PendingPlanEffectiveUtc = null);

@@ -9,6 +9,8 @@ public static class SubscriptionPlans
 
     // Fixed monthly prices matching the Stripe Dashboard Prices configured in Phase 0.
     public static decimal GetMonthlyPriceUsd(string plan) => plan == DoneForYou ? 199.99m : 29.99m;
+
+    public static int GetOnboardingFeeCents(string plan) => plan == DoneForYou ? 19999 : 0;
 }
 
 public sealed record ProvisionTenantRequest(
