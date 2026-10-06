@@ -92,6 +92,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.Id).HasColumnName("id");
             entity.Property(x => x.TenantId).HasColumnName("tenant_id");
             entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(120);
+            entity.Property(x => x.Description).HasColumnName("description").HasMaxLength(300).HasDefaultValue(string.Empty);
             entity.Property(x => x.SortOrder).HasColumnName("sort_order");
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.MenuCategories)

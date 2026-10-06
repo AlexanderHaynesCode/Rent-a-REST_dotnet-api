@@ -64,6 +64,7 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             .Select(category => new PublicMenuCategoryResponse(
                 category.Id,
                 category.Name,
+                category.Description,
                 category.SortOrder,
                 items.Where(item => item.CategoryId == category.Id)
                     .OrderBy(item => item.SortOrder)

@@ -307,7 +307,13 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<ActionResult<Guid>> CreateCategory([FromBody] CreateMenuCategoryRequest request, CancellationToken cancellationToken)
     {
-        var trimmedRequest = request with { Name = request.Name.Trim() };
+        var description = request.Description?.Trim();
+        if (description?.Length > 300)
+        {
+            return BadRequest(new { Error = "Category description must be 300 characters or fewer." });
+        }
+
+        var trimmedRequest = request with { Name = request.Name.Trim(), Description = description };
         var categoryId = await restaurantAdminService.CreateMenuCategoryAsync(tenantContext.TenantId!.Value, trimmedRequest, cancellationToken);
 
         return CreatedAtAction(nameof(GetCurrent), new { }, categoryId);

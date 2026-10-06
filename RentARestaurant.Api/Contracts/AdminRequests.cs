@@ -24,7 +24,8 @@ public sealed record UpsertDateSpecificHourRequest(
 
 public sealed record CreateMenuCategoryRequest(
     string Name,
-    int SortOrder);
+    int SortOrder,
+    string? Description = null);
 
 public sealed record CreateMenuItemRequest(
     Guid CategoryId,

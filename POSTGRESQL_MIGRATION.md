@@ -230,6 +230,7 @@ CREATE TABLE menu_categories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     name VARCHAR(120) NOT NULL,
+    description VARCHAR(300) NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -242,6 +243,13 @@ CREATE INDEX idx_menu_categories_sort_order ON menu_categories(tenant_id, sort_o
 ```
 
 **Note:** Added `UNIQUE(tenant_id, name)` to match `HasIndex(x => new { x.TenantId, x.Name }).IsUnique()` in `AppDbContext` — without it, the DB would silently allow duplicate category names per tenant.
+
+**For existing databases, add the optional category description column:**
+
+```sql
+ALTER TABLE menu_categories
+ADD COLUMN description VARCHAR(300) NOT NULL DEFAULT '';
+```
 
 ---
 
@@ -404,6 +412,7 @@ CREATE TABLE menu_categories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     name VARCHAR(120) NOT NULL,
+    description VARCHAR(300) NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     UNIQUE(tenant_id, name),

@@ -17,6 +17,7 @@ public sealed record PublicRestaurantResponse(
 public sealed record PublicMenuCategoryResponse(
     Guid Id,
     string Name,
+    string Description,
     int SortOrder,
     IReadOnlyList<PublicMenuItemResponse> Items);
 

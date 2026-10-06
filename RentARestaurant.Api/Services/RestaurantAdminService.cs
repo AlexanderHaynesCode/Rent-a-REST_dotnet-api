@@ -29,7 +29,7 @@ public interface IRestaurantAdminService
 
     Task<Guid> CreateMenuCategoryAsync(Guid tenantId, CreateMenuCategoryRequest request, CancellationToken cancellationToken);
 
-    Task<bool> UpdateMenuCategoryAsync(Guid tenantId, Guid categoryId, string name, int sortOrder, CancellationToken cancellationToken);
+    Task<bool> UpdateMenuCategoryAsync(Guid tenantId, Guid categoryId, string name, string description, int sortOrder, CancellationToken cancellationToken);
 
     Task<bool> DeleteMenuCategoryAsync(Guid tenantId, Guid categoryId, CancellationToken cancellationToken);
 
@@ -90,6 +90,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             .Select(category => new PublicMenuCategoryResponse(
                 category.Id,
                 category.Name,
+                category.Description,
                 category.SortOrder,
                 items.Where(item => item.CategoryId == category.Id)
                     .OrderBy(item => item.SortOrder)
@@ -185,6 +186,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             Name = request.Name,
+            Description = request.Description?.Trim() ?? string.Empty,
             SortOrder = request.SortOrder
         };
 
@@ -193,7 +195,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         return category.Id;
     }
 
-    public async Task<bool> UpdateMenuCategoryAsync(Guid tenantId, Guid categoryId, string name, int sortOrder, CancellationToken cancellationToken)
+    public async Task<bool> UpdateMenuCategoryAsync(Guid tenantId, Guid categoryId, string name, string description, int sortOrder, CancellationToken cancellationToken)
     {
         var category = await dbContext.MenuCategories
             .SingleOrDefaultAsync(x => x.Id == categoryId && x.TenantId == tenantId, cancellationToken);
@@ -204,6 +206,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         }
 
         category.Name = name;
+        category.Description = description.Trim();
         category.SortOrder = sortOrder;
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -375,12 +378,14 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                     Id = category.Id,
                     TenantId = tenantId,
                     Name = category.Name,
+                    Description = category.Description,
                     SortOrder = category.SortOrder
                 });
             }
             else
             {
                 targetCategory.Name = category.Name;
+                targetCategory.Description = category.Description;
                 targetCategory.SortOrder = category.SortOrder;
             }
 

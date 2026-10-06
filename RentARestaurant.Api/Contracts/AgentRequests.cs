@@ -11,7 +11,8 @@ public sealed record AgentMenuCategoryChange(
     string Action,
     Guid? CategoryId,
     string? Name,
-    int? SortOrder);
+    int? SortOrder,
+    string? Description = null);
 
 public sealed record AgentMenuItemChange(
     string Action,

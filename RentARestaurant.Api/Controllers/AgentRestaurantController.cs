@@ -209,12 +209,19 @@ public class AgentRestaurantController(
             return;
         }
 
+        var description = change.Description?.Trim();
+        if (description?.Length > 300)
+        {
+            summary.Add("Skipped menu category change because its description exceeds 300 characters.");
+            return;
+        }
+
         switch (action)
         {
             case AgentItemAction.Create:
                 var name = change.Name ?? "New Category";
                 var createdCategoryId = await restaurantAdminService.CreateMenuCategoryAsync(
-                    tenantId, new CreateMenuCategoryRequest(name, change.SortOrder ?? 0), cancellationToken);
+                    tenantId, new CreateMenuCategoryRequest(name, change.SortOrder ?? 0, description), cancellationToken);
                 newCategoryIdsByName[name] = createdCategoryId;
                 summary.Add($"Created menu category '{name}'.");
                 break;
@@ -227,9 +234,10 @@ public class AgentRestaurantController(
                     if (current is null) break;
 
                     var mergedName = change.Name ?? current.Name;
+                    var mergedDescription = description ?? current.Description;
                     var mergedSortOrder = change.SortOrder ?? current.SortOrder;
                     var updated = await restaurantAdminService.UpdateMenuCategoryAsync(
-                        tenantId, categoryId, mergedName, mergedSortOrder, cancellationToken);
+                        tenantId, categoryId, mergedName, mergedDescription, mergedSortOrder, cancellationToken);
                     if (updated) summary.Add($"Updated menu category '{mergedName}'.");
                 }
                 break;
