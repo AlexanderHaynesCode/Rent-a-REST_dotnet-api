@@ -27,6 +27,11 @@ public sealed record CreateMenuCategoryRequest(
     int SortOrder,
     string? Description = null);
 
+public sealed record UpdateMenuCategoryRequest(
+    string Name,
+    string Description,
+    int SortOrder);
+
 public sealed record CreateMenuItemRequest(
     Guid CategoryId,
     string Name,

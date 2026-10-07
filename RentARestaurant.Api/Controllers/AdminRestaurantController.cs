@@ -319,6 +319,52 @@ public class AdminRestaurantController(
         return CreatedAtAction(nameof(GetCurrent), new { }, categoryId);
     }
 
+    [HttpPut("menu/categories/{id:guid}")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> UpdateCategory(
+        Guid id,
+        [FromBody] UpdateMenuCategoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = tenantContext.TenantId!.Value;
+        var name = request.Name.Trim();
+        var description = request.Description.Trim();
+
+        if (description.Length > 300)
+        {
+            return BadRequest(new { Error = "Category description must be 300 characters or fewer." });
+        }
+
+        var categoryExists = await dbContext.MenuCategories
+            .AnyAsync(x => x.Id == id && x.TenantId == tenantId, cancellationToken);
+        if (!categoryExists)
+        {
+            return NotFound();
+        }
+
+        var duplicateNameExists = await dbContext.MenuCategories
+            .AnyAsync(x => x.TenantId == tenantId && x.Id != id && x.Name == name, cancellationToken);
+        if (duplicateNameExists)
+        {
+            return Conflict(new { Error = "A menu category with that name already exists." });
+        }
+
+        var updated = await restaurantAdminService.UpdateMenuCategoryAsync(
+            tenantId,
+            id,
+            name,
+            description,
+            request.SortOrder,
+            cancellationToken);
+        if (!updated)
+        {
+            return NotFound();
+        }
+
+        return NoContent();
+    }
+
     [HttpPost("menu/items")]
     [RequireTenantContext]
     [RequireAdminAccess]
