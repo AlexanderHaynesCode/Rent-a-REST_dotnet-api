@@ -27,6 +27,10 @@ public interface IRestaurantAdminService
 
     Task UpsertHoursAsync(Guid tenantId, IReadOnlyList<UpsertBusinessHourRequest> request, CancellationToken cancellationToken);
 
+    Task UpsertDateSpecificHoursAsync(Guid tenantId, IReadOnlyList<UpsertDateSpecificHourRequest> request, CancellationToken cancellationToken);
+
+    Task<bool> DeleteDateSpecificHourAsync(Guid tenantId, DateOnly date, CancellationToken cancellationToken);
+
     Task<Guid> CreateMenuCategoryAsync(Guid tenantId, CreateMenuCategoryRequest request, CancellationToken cancellationToken);
 
     Task<bool> UpdateMenuCategoryAsync(Guid tenantId, Guid categoryId, string name, string description, int sortOrder, CancellationToken cancellationToken);
@@ -76,14 +80,23 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         var allHours = await dbContext.BusinessHours
-            .Where(x => x.TenantId == tenantId && (x.Date == null || x.Date == today))
+            .Where(x => x.TenantId == tenantId && (x.Date == null || x.Date >= today))
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
         var hours = allHours
-            .GroupBy(x => x.DayOfWeek)
-            .Select(g => g.FirstOrDefault(x => x.Date == today) ?? g.First(x => x.Date == null))
+            .Where(x => x.Date == null)
             .OrderBy(x => x.DayOfWeek)
+            .ToList();
+
+        var dateSpecificHours = allHours
+            .Where(x => x.Date != null)
+            .OrderBy(x => x.Date)
+            .Select(x => new DateSpecificHourSnapshot(
+                x.Date!.Value,
+                x.OpenTime.ToString("HH:mm"),
+                x.CloseTime.ToString("HH:mm"),
+                x.IsClosed))
             .ToList();
 
         var menu = categories
@@ -120,7 +133,8 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 hour.DayOfWeek,
                 hour.OpenTime.ToString("HH:mm"),
                 hour.CloseTime.ToString("HH:mm"),
-                hour.IsClosed)).ToList());
+                hour.IsClosed)).ToList(),
+                dateSpecificHours);
     }
 
     public async Task<bool> UpdateBrandingAsync(Guid tenantId, UpdateBrandingRequest request, CancellationToken cancellationToken)
@@ -177,6 +191,55 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task UpsertDateSpecificHoursAsync(Guid tenantId, IReadOnlyList<UpsertDateSpecificHourRequest> request, CancellationToken cancellationToken)
+    {
+        var dates = request.Select(x => x.Date).ToList();
+        var existing = await dbContext.BusinessHours
+            .Where(x => x.TenantId == tenantId && x.Date != null && dates.Contains(x.Date!.Value))
+            .ToListAsync(cancellationToken);
+
+        foreach (var item in request)
+        {
+            var target = existing.FirstOrDefault(x => x.Date == item.Date);
+            if (target is null)
+            {
+                dbContext.BusinessHours.Add(new BusinessHour
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    DayOfWeek = item.Date.DayOfWeek,
+                    OpenTime = item.OpenTime,
+                    CloseTime = item.CloseTime,
+                    IsClosed = item.IsClosed,
+                    Date = item.Date
+                });
+            }
+            else
+            {
+                target.DayOfWeek = item.Date.DayOfWeek;
+                target.OpenTime = item.OpenTime;
+                target.CloseTime = item.CloseTime;
+                target.IsClosed = item.IsClosed;
+            }
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> DeleteDateSpecificHourAsync(Guid tenantId, DateOnly date, CancellationToken cancellationToken)
+    {
+        var hour = await dbContext.BusinessHours
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Date == date, cancellationToken);
+        if (hour is null)
+        {
+            return false;
+        }
+
+        dbContext.BusinessHours.Remove(hour);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<Guid> CreateMenuCategoryAsync(Guid tenantId, CreateMenuCategoryRequest request, CancellationToken cancellationToken)
@@ -349,6 +412,45 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 target.OpenTime = openTime;
                 target.CloseTime = closeTime;
                 target.IsClosed = hour.IsClosed;
+            }
+        }
+
+        // Null means the snapshot predates date-specific hours, so leave overrides untouched.
+        if (snapshot.DateSpecificHours is not null)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            var existingOverrides = await dbContext.BusinessHours
+                .Where(x => x.TenantId == tenantId && x.Date != null && x.Date >= today)
+                .ToListAsync(cancellationToken);
+
+            var snapshotDates = snapshot.DateSpecificHours.Select(x => x.Date).ToHashSet();
+            dbContext.BusinessHours.RemoveRange(existingOverrides.Where(x => !snapshotDates.Contains(x.Date!.Value)));
+
+            foreach (var entry in snapshot.DateSpecificHours.Where(x => x.Date >= today))
+            {
+                var openTime = TimeOnly.Parse(entry.OpenTime);
+                var closeTime = TimeOnly.Parse(entry.CloseTime);
+                var target = existingOverrides.FirstOrDefault(x => x.Date == entry.Date);
+
+                if (target is null)
+                {
+                    dbContext.BusinessHours.Add(new BusinessHour
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenantId,
+                        DayOfWeek = entry.Date.DayOfWeek,
+                        OpenTime = openTime,
+                        CloseTime = closeTime,
+                        IsClosed = entry.IsClosed,
+                        Date = entry.Date
+                    });
+                }
+                else
+                {
+                    target.OpenTime = openTime;
+                    target.CloseTime = closeTime;
+                    target.IsClosed = entry.IsClosed;
+                }
             }
         }
 

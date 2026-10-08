@@ -12,7 +12,15 @@ public sealed record PublicRestaurantResponse(
     string? HeroImageUrl,
     string? PrimaryCtaUrl,  // CTA = Call To Action button like "Order Now/Online"
     IReadOnlyList<PublicMenuCategoryResponse> Menu,
-    IReadOnlyList<BusinessHourResponse> Hours);
+    IReadOnlyList<BusinessHourResponse> Hours,
+    IReadOnlyList<DateSpecificHourSnapshot>? DateSpecificHours = null);
+
+/// <summary>Only populated by the admin/agent snapshot; the public storefront response leaves it null.</summary>
+public sealed record DateSpecificHourSnapshot(
+    DateOnly Date,
+    string OpenTime,
+    string CloseTime,
+    bool IsClosed);
 
 public sealed record PublicMenuCategoryResponse(
     Guid Id,

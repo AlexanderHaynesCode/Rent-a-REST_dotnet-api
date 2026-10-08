@@ -63,6 +63,12 @@ public class AgentRestaurantController(
         var preChangeSnapshot = await restaurantAdminService.GetSnapshotAsync(tenantId, cancellationToken);
         var appliedSummary = new List<string>();
 
+        var dateHoursError = ValidateDateSpecificHours(request.ChangeSet.DateSpecificHoursChanges);
+        if (dateHoursError is not null)
+        {
+            return BadRequest(new { Error = dateHoursError });
+        }
+
         if (request.ChangeSet.BrandingChange is { } branding)
         {
             await ApplyBrandingChangeAsync(tenantId, branding, cancellationToken, appliedSummary);
@@ -75,6 +81,34 @@ public class AgentRestaurantController(
                 .ToList();
             await restaurantAdminService.UpsertHoursAsync(tenantId, hourRequests, cancellationToken);
             appliedSummary.Add($"Updated business hours ({hours.Count} day(s)).");
+        }
+
+        if (request.ChangeSet.DateSpecificHoursChanges is { Count: > 0 } dateHours)
+        {
+            var upserts = dateHours.Where(h => IsAction(h.Action, "upsert")).ToList();
+            if (upserts.Count > 0)
+            {
+                await restaurantAdminService.UpsertDateSpecificHoursAsync(
+                    tenantId,
+                    upserts.Select(h => new UpsertDateSpecificHourRequest(
+                        h.Date, h.OpenTime ?? default, h.CloseTime ?? default, h.IsClosed ?? false)).ToList(),
+                    cancellationToken);
+
+                foreach (var h in upserts)
+                {
+                    appliedSummary.Add(h.IsClosed == true
+                        ? $"Set {h.Date:yyyy-MM-dd} as closed."
+                        : $"Set hours for {h.Date:yyyy-MM-dd} to {h.OpenTime:HH:mm}-{h.CloseTime:HH:mm}.");
+                }
+            }
+
+            foreach (var h in dateHours.Where(h => IsAction(h.Action, "delete")))
+            {
+                var removed = await restaurantAdminService.DeleteDateSpecificHourAsync(tenantId, h.Date, cancellationToken);
+                appliedSummary.Add(removed
+                    ? $"Removed special hours for {h.Date:yyyy-MM-dd}."
+                    : $"No special hours existed for {h.Date:yyyy-MM-dd}; nothing removed.");
+            }
         }
 
         // Categories created in this same change-set have no id until applied - items that
@@ -163,6 +197,56 @@ public class AgentRestaurantController(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return NoContent();
+    }
+
+    private static bool IsAction(string? value, string expected) =>
+        string.Equals(value?.Trim(), expected, StringComparison.OrdinalIgnoreCase);
+
+    private static string? ValidateDateSpecificHours(IReadOnlyList<AgentDateSpecificHoursChange>? changes)
+    {
+        if (changes is null || changes.Count == 0)
+        {
+            return null;
+        }
+
+        if (changes.Count > 7)
+        {
+            return "At most 7 date-specific hours changes are allowed per request.";
+        }
+
+        if (changes.Select(c => c.Date).Distinct().Count() != changes.Count)
+        {
+            return "Duplicate dates are not allowed in date-specific hours changes.";
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        foreach (var change in changes)
+        {
+            if (!IsAction(change.Action, "upsert") && !IsAction(change.Action, "delete"))
+            {
+                return $"Unknown date-specific hours action '{change.Action}'.";
+            }
+
+            if (change.Date < today)
+            {
+                return $"Date {change.Date:yyyy-MM-dd} is in the past.";
+            }
+
+            if (IsAction(change.Action, "upsert") && change.IsClosed != true)
+            {
+                if (change.IsClosed is null || change.OpenTime is null || change.CloseTime is null)
+                {
+                    return $"Open time, close time and isClosed are required for {change.Date:yyyy-MM-dd}.";
+                }
+
+                if (change.OpenTime >= change.CloseTime)
+                {
+                    return $"Open time must be before close time for {change.Date:yyyy-MM-dd}.";
+                }
+            }
+        }
+
+        return null;
     }
 
     private async Task ApplyBrandingChangeAsync(

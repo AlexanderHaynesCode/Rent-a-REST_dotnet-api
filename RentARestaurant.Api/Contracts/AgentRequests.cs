@@ -31,6 +31,13 @@ public sealed record AgentHoursChange(
     TimeOnly CloseTime,
     bool IsClosed);
 
+public sealed record AgentDateSpecificHoursChange(
+    string Action,
+    DateOnly Date,
+    TimeOnly? OpenTime,
+    TimeOnly? CloseTime,
+    bool? IsClosed);
+
 public sealed record AgentBrandingChange(
     string? DisplayName,
     string? Tagline,
@@ -49,7 +56,8 @@ public sealed record AgentChangeSet(
     IReadOnlyList<AgentMenuCategoryChange>? MenuCategoryChanges,
     IReadOnlyList<AgentMenuItemChange>? MenuItemChanges,
     IReadOnlyList<AgentHoursChange>? HoursChanges,
-    AgentBrandingChange? BrandingChange);
+    AgentBrandingChange? BrandingChange,
+    IReadOnlyList<AgentDateSpecificHoursChange>? DateSpecificHoursChanges = null);
 
 public sealed record ApplyAgentChangeSetRequest(
     Guid SubmissionId,

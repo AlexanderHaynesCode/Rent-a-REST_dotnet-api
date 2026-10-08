@@ -161,36 +161,7 @@ public class AdminRestaurantController(
             if (dates.Distinct().Count() != dates.Count)
                 return BadRequest(new { Error = "Duplicate dates are not allowed." });
 
-            var existing = await dbContext.BusinessHours
-                .Where(x => x.Date != null && dates.Contains(x.Date!.Value))
-                .ToListAsync(cancellationToken);
-
-            foreach (var item in request)
-            {
-                var target = existing.FirstOrDefault(x => x.Date == item.Date);
-                if (target is null)
-                {
-                    dbContext.BusinessHours.Add(new BusinessHour
-                    {
-                        Id = Guid.NewGuid(),
-                        TenantId = tenantContext.TenantId!.Value,
-                        DayOfWeek = item.Date.DayOfWeek,
-                        OpenTime = item.OpenTime,
-                        CloseTime = item.CloseTime,
-                        IsClosed = item.IsClosed,
-                        Date = item.Date
-                    });
-                }
-                else
-                {
-                    target.DayOfWeek = item.Date.DayOfWeek;
-                    target.OpenTime = item.OpenTime;
-                    target.CloseTime = item.CloseTime;
-                    target.IsClosed = item.IsClosed;
-                }
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
+            await restaurantAdminService.UpsertDateSpecificHoursAsync(tenantContext.TenantId!.Value, request, cancellationToken);
             return NoContent();
         }
         catch (Exception ex)
@@ -408,14 +379,8 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<IActionResult> DeleteDateSpecificHour(DateOnly date, CancellationToken cancellationToken)
     {
-        var hour = await dbContext.BusinessHours
-            .SingleOrDefaultAsync(x => x.TenantId == tenantContext.TenantId!.Value && x.Date == date, cancellationToken);
-        if (hour is null)
-            return NotFound();
-
-        dbContext.BusinessHours.Remove(hour);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return NoContent();
+        var deleted = await restaurantAdminService.DeleteDateSpecificHourAsync(tenantContext.TenantId!.Value, date, cancellationToken);
+        return deleted ? NoContent() : NotFound();
     }
 
     [HttpDelete("menu/categories/{id:guid}")]
