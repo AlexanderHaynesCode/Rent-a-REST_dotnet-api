@@ -37,7 +37,7 @@ public class ResendEmailService(
         var message = new EmailMessage
         {
             From = $"{opts.FromName} <{opts.FromAddress}>",
-            Subject = $"Weeeeeeelcome to Rentaurants \u2014 {restaurantName} is live!",
+            Subject = $"Welcome to Rentaurants \u2014 {restaurantName} is live!",
             HtmlBody = $"""
                 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
                   <h2>Welcome to Rentaurants!</h2>
