@@ -122,7 +122,8 @@ public class TenantProvisioningService(
 
         try
         {
-            await emailService.SendWelcomeEmailAsync(request.OwnerEmail.Trim(), request.RestaurantName.Trim(), slug, cancellationToken);
+            await emailService.SendWelcomeEmailAsync(
+                request.OwnerEmail.Trim(), request.RestaurantName.Trim(), slug, normalizedPlan, cancellationToken);
         }
         catch (Exception ex)
         {

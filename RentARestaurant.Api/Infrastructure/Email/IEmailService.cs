@@ -2,7 +2,7 @@ namespace RentARestaurant.Api.Infrastructure.Email;
 
 public interface IEmailService
 {
-    Task SendWelcomeEmailAsync(string toEmail, string restaurantName, string slug, CancellationToken cancellationToken);
+    Task SendWelcomeEmailAsync(string toEmail, string restaurantName, string slug, string subscriptionPlan, CancellationToken cancellationToken);
 
     Task SendAgentChangesAppliedEmailAsync(
         string toEmail,

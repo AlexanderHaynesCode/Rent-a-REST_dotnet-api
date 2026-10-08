@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using RentARestaurant.Api.Contracts;
 using Resend;
 
 namespace RentARestaurant.Api.Infrastructure.Email;
@@ -8,27 +9,45 @@ public class ResendEmailService(
     IOptions<EmailOptions> options,
     ILogger<ResendEmailService> logger) : IEmailService
 {
-    private const string AdminUrl = "admin.rentaurants.com";
-    private const string RestaurantBaseUrl = "menu.rentaurants.com";
+    private const string AdminUrl = "https://admin.rentaurants.com";
+    private const string RestaurantBaseUrl = "https://menu.rentaurants.com";
+    private const string UpdatesEmail = "updates@rentaurants.com";
+    private const string DoneForYouGuideUrl = "https://rentaurants.com/done-for-you-guide";
 
-    public async Task SendWelcomeEmailAsync(string toEmail, string restaurantName, string slug, CancellationToken cancellationToken)
+    public async Task SendWelcomeEmailAsync(string toEmail, string restaurantName, string slug, string subscriptionPlan, CancellationToken cancellationToken)
     {
         var opts = options.Value;
         var restaurantUrl = $"{RestaurantBaseUrl}/{slug}";
+        var safeRestaurantName = System.Net.WebUtility.HtmlEncode(restaurantName);
+        var doneForYouSection = subscriptionPlan == SubscriptionPlans.DoneForYou
+            ? $"""
+            <hr />
+            <h3>Your Done-For-You website updates</h3>
+                    <p>Your Done-For-You plan includes website updates by email. Send your request to
+            <a href="mailto:{UpdatesEmail}">{UpdatesEmail}</a> from the email address registered to your Rentaurants account.
+                    Describe the changes in the message body; the subject is optional.</p>
+                    <p>If we need more detail before applying the changes, we will reply to ask.
+            You can also attach menu notes, a logo, or a hero image.</p>
+            <p>See the <a href="{DoneForYouGuideUrl}">Done-For-You update guide</a> for supported fields and examples.
+            For help, email <a href="mailto:help@rentaurants.com">help@rentaurants.com</a>.</p>
+            """
+            : string.Empty;
+        logger.LogInformation("subscriptionPlan: {SubscriptionPlan}, doneForYouSection: {DoneForYouSection}", subscriptionPlan, doneForYouSection);
 
         var message = new EmailMessage
         {
             From = $"{opts.FromName} <{opts.FromAddress}>",
-            Subject = $"Welcome to Rentaurants \u2014 {restaurantName} is live!",
+            Subject = $"Weeeeeeelcome to Rentaurants \u2014 {restaurantName} is live!",
             HtmlBody = $"""
                 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
                   <h2>Welcome to Rentaurants!</h2>
-                  <p>Your restaurant <strong>{restaurantName}</strong> has been successfully provisioned.</p>
+                  <p>Your restaurant <strong>{safeRestaurantName}</strong> has been successfully provisioned.</p>
                   <p>Here are your links:</p>
                   <ul>
                     <li><strong>Admin Dashboard:</strong> <a href="{AdminUrl}">{AdminUrl}</a></li>
                     <li><strong>Your Restaurant Page:</strong> <a href="{restaurantUrl}">{restaurantUrl}</a></li>
                   </ul>
+                  {doneForYouSection}
                   <p>Welcome aboard!</p>
                   <p>The Rentaurants Team</p>
                 </div>
