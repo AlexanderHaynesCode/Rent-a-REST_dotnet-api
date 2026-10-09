@@ -63,12 +63,20 @@ public class ResendEmailService(
         string toEmail,
         string restaurantName,
         IReadOnlyList<string> appliedSummary,
+        IReadOnlyList<string> rejectedSummary,
         Guid auditId,
         DateTime rollbackExpiresUtc,
         CancellationToken cancellationToken)
     {
         var opts = options.Value;
         var summaryHtml = string.Join(string.Empty, appliedSummary.Select(line => $"<li>{System.Net.WebUtility.HtmlEncode(line)}</li>"));
+        var safeRestaurantName = System.Net.WebUtility.HtmlEncode(restaurantName);
+        var notAppliedHtml = rejectedSummary.Count == 0
+            ? string.Empty
+            : $"""
+              <p>The following were <strong>not applied</strong>:</p>
+              <ul>{string.Join(string.Empty, rejectedSummary.Select(line => $"<li>{System.Net.WebUtility.HtmlEncode(line)}</li>"))}</ul>
+              """;
 
         var message = new EmailMessage
         {
@@ -77,10 +85,11 @@ public class ResendEmailService(
             HtmlBody = $"""
                 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
                   <h2>Your website updates are live!</h2>
-                  <p>We applied the following changes to <strong>{restaurantName}</strong> automatically:</p>
+                  <p>We applied the following changes to <strong>{safeRestaurantName}</strong> automatically:</p>
                   <ul>
                     {summaryHtml}
                   </ul>
+                  {notAppliedHtml}
                   <p>If something doesn't look right, reply to this email and we'll help, or these changes can be
                   rolled back until <strong>{rollbackExpiresUtc:yyyy-MM-dd}</strong> (reference: {auditId}).</p>
                   <p>The Rentaurants Team</p>
@@ -91,6 +100,37 @@ public class ResendEmailService(
 
         await resend.EmailSendAsync(message, cancellationToken);
         logger.LogInformation("Agent-applied-changes email sent to {Email} for audit {AuditId}", toEmail, auditId);
+    }
+
+    public async Task SendAgentChangesNotAppliedEmailAsync(
+        string toEmail,
+        string restaurantName,
+        IReadOnlyList<string> rejectedSummary,
+        CancellationToken cancellationToken)
+    {
+        var opts = options.Value;
+        var rejectedHtml = string.Join(string.Empty, rejectedSummary.Select(line => $"<li>{System.Net.WebUtility.HtmlEncode(line)}</li>"));
+
+        var message = new EmailMessage
+        {
+            From = $"{opts.FromName} <{opts.FromAddress}>",
+            Subject = $"We couldn't apply your update \u2014 {restaurantName}",
+            HtmlBody = $"""
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+                  <h2>No changes were made</h2>
+                  <p>We received your update request for <strong>{System.Net.WebUtility.HtmlEncode(restaurantName)}</strong>, but couldn't apply it:</p>
+                  <ul>
+                    {rejectedHtml}
+                  </ul>
+                  <p>Reply to this email with a corrected request and we'll take care of it.</p>
+                  <p>The Rentaurants Team</p>
+                </div>
+                """
+        };
+        message.To.Add(toEmail);
+
+        await resend.EmailSendAsync(message, cancellationToken);
+        logger.LogInformation("Agent-not-applied email sent to {Email}", toEmail);
     }
 
     public async Task SendAgentClarificationNeededEmailAsync(

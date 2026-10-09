@@ -63,7 +63,7 @@ public class AgentRestaurantController(
         var preChangeSnapshot = await restaurantAdminService.GetSnapshotAsync(tenantId, cancellationToken);
         var appliedSummary = new List<string>();
 
-        var dateHoursError = ValidateDateSpecificHours(request.ChangeSet.DateSpecificHoursChanges);
+        var (activeDateHours, rejectedSummary, dateHoursError) = ValidateDateSpecificHours(request.ChangeSet.DateSpecificHoursChanges);
         if (dateHoursError is not null)
         {
             return BadRequest(new { Error = dateHoursError });
@@ -83,7 +83,7 @@ public class AgentRestaurantController(
             appliedSummary.Add($"Updated business hours ({hours.Count} day(s)).");
         }
 
-        if (request.ChangeSet.DateSpecificHoursChanges is { Count: > 0 } dateHours)
+        if (activeDateHours is { Count: > 0 } dateHours)
         {
             var upserts = dateHours.Where(h => IsAction(h.Action, "upsert")).ToList();
             if (upserts.Count > 0)
@@ -131,6 +131,23 @@ public class AgentRestaurantController(
             }
         }
 
+        if (appliedSummary.Count == 0 && rejectedSummary.Count > 0)
+        {
+            submission.Status = AgentSubmissionStatus.Rejected;
+            submission.RejectionReason = string.Join(" ", rejectedSummary);
+            submission.UpdatedUtc = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            var rejectedOwnerEmail = await GetOwnerEmailAsync(tenantId, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(rejectedOwnerEmail))
+            {
+                await emailService.SendAgentChangesNotAppliedEmailAsync(
+                    rejectedOwnerEmail, tenant.Name, rejectedSummary, cancellationToken);
+            }
+
+            return Ok(new AgentApplyResponse(null, null, null, appliedSummary, rejectedSummary));
+        }
+
         var rollbackExpiresUtc = DateTime.UtcNow.AddDays(30);
         var audit = new AgentChangeAudit
         {
@@ -150,20 +167,23 @@ public class AgentRestaurantController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var ownerEmail = await dbContext.TenantUsers
-            .Where(x => x.TenantId == tenantId)
-            .OrderBy(x => x.Role == "Owner" ? 0 : 1)
-            .Select(x => x.Email)
-            .FirstOrDefaultAsync(cancellationToken);
+        var ownerEmail = await GetOwnerEmailAsync(tenantId, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(ownerEmail) && appliedSummary.Count > 0)
         {
             await emailService.SendAgentChangesAppliedEmailAsync(
-                ownerEmail, tenant.Name, appliedSummary, audit.Id, rollbackExpiresUtc, cancellationToken);
+                ownerEmail, tenant.Name, appliedSummary, rejectedSummary, audit.Id, rollbackExpiresUtc, cancellationToken);
         }
 
-        return Ok(new AgentApplyResponse(audit.Id, audit.AppliedUtc, rollbackExpiresUtc, appliedSummary));
+        return Ok(new AgentApplyResponse(audit.Id, audit.AppliedUtc, rollbackExpiresUtc, appliedSummary, rejectedSummary));
     }
+
+    private Task<string?> GetOwnerEmailAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        dbContext.TenantUsers
+            .Where(x => x.TenantId == tenantId)
+            .OrderBy(x => x.Role == "Owner" ? 0 : 1)
+            .Select(x => x.Email)
+            .FirstOrDefaultAsync(cancellationToken);
 
     [HttpPost("rollback/{auditId:guid}")]
     public async Task<IActionResult> Rollback(Guid auditId, CancellationToken cancellationToken)
@@ -202,21 +222,24 @@ public class AgentRestaurantController(
     private static bool IsAction(string? value, string expected) =>
         string.Equals(value?.Trim(), expected, StringComparison.OrdinalIgnoreCase);
 
-    private static string? ValidateDateSpecificHours(IReadOnlyList<AgentDateSpecificHoursChange>? changes)
+    private static (List<AgentDateSpecificHoursChange> Active, List<string> Rejected, string? Error) ValidateDateSpecificHours(
+        IReadOnlyList<AgentDateSpecificHoursChange>? changes)
     {
+        var active = new List<AgentDateSpecificHoursChange>();
+        var rejected = new List<string>();
         if (changes is null || changes.Count == 0)
         {
-            return null;
+            return (active, rejected, null);
         }
 
         if (changes.Count > 7)
         {
-            return "At most 7 date-specific hours changes are allowed per request.";
+            return (active, rejected, "At most 7 date-specific hours changes are allowed per request.");
         }
 
         if (changes.Select(c => c.Date).Distinct().Count() != changes.Count)
         {
-            return "Duplicate dates are not allowed in date-specific hours changes.";
+            return (active, rejected, "Duplicate dates are not allowed in date-specific hours changes.");
         }
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -224,29 +247,32 @@ public class AgentRestaurantController(
         {
             if (!IsAction(change.Action, "upsert") && !IsAction(change.Action, "delete"))
             {
-                return $"Unknown date-specific hours action '{change.Action}'.";
+                return (active, rejected, $"Unknown date-specific hours action '{change.Action}'.");
             }
 
             if (change.Date < today)
             {
-                return $"Date {change.Date:yyyy-MM-dd} is in the past.";
+                rejected.Add($"Hours for {change.Date:MMMM d, yyyy} were not changed because that date has already passed. If you meant next year, reply with the year.");
+                continue;
             }
 
             if (IsAction(change.Action, "upsert") && change.IsClosed != true)
             {
                 if (change.IsClosed is null || change.OpenTime is null || change.CloseTime is null)
                 {
-                    return $"Open time, close time and isClosed are required for {change.Date:yyyy-MM-dd}.";
+                    return (active, rejected, $"Open time, close time and isClosed are required for {change.Date:yyyy-MM-dd}.");
                 }
 
                 if (change.OpenTime >= change.CloseTime)
                 {
-                    return $"Open time must be before close time for {change.Date:yyyy-MM-dd}.";
+                    return (active, rejected, $"Open time must be before close time for {change.Date:yyyy-MM-dd}.");
                 }
             }
+
+            active.Add(change);
         }
 
-        return null;
+        return (active, rejected, null);
     }
 
     private async Task ApplyBrandingChangeAsync(

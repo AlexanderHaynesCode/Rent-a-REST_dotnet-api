@@ -8,8 +8,15 @@ public interface IEmailService
         string toEmail,
         string restaurantName,
         IReadOnlyList<string> appliedSummary,
+        IReadOnlyList<string> rejectedSummary,
         Guid auditId,
         DateTime rollbackExpiresUtc,
+        CancellationToken cancellationToken);
+
+    Task SendAgentChangesNotAppliedEmailAsync(
+        string toEmail,
+        string restaurantName,
+        IReadOnlyList<string> rejectedSummary,
         CancellationToken cancellationToken);
 
     Task SendAgentClarificationNeededEmailAsync(

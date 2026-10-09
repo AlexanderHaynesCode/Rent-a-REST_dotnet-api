@@ -5,10 +5,11 @@ public sealed record AgentSnapshotResponse(
     bool AutoApplyEligible);
 
 public sealed record AgentApplyResponse(
-    Guid AuditId,
-    DateTime AppliedUtc,
-    DateTime RollbackExpiresUtc,
-    IReadOnlyList<string> AppliedSummary);
+    Guid? AuditId,
+    DateTime? AppliedUtc,
+    DateTime? RollbackExpiresUtc,
+    IReadOnlyList<string> AppliedSummary,
+    IReadOnlyList<string> RejectedSummary);
 
 public sealed record AgentSubmissionResponse(
     Guid Id,
