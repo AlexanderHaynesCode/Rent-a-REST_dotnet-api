@@ -5,6 +5,7 @@ using RentARestaurant.Api.Contracts;
 using RentARestaurant.Api.Data;
 using RentARestaurant.Api.Domain.Entities;
 using RentARestaurant.Api.Infrastructure.Email;
+using RentARestaurant.Api.Infrastructure.Storage;
 using RentARestaurant.Api.Infrastructure.Tenancy;
 using RentARestaurant.Api.Services;
 
@@ -22,9 +23,11 @@ public class AgentRestaurantController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
     IRestaurantAdminService restaurantAdminService,
-    IEmailService emailService) : ControllerBase
+    IEmailService emailService,
+    IR2StorageService r2StorageService) : ControllerBase
 {
     private const string DoneForYouPlan = "Done-For-You";
+    private const long MaxImageBytes = 10 * 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [HttpGet("snapshot")]
@@ -217,6 +220,86 @@ public class AgentRestaurantController(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Stores an email-attached image under a unique R2 key and returns its URL without touching the profile,
+    /// so the live site only changes once the URL passes validation and is applied.
+    /// </summary>
+    [HttpPost("images/{imageType}")]
+    [RequestSizeLimit(MaxImageBytes + 1024 * 1024)]
+    public async Task<IActionResult> UploadImage(
+        string imageType,
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        var normalizedImageType = imageType.Trim().ToLowerInvariant();
+        if (normalizedImageType is not ("logo" or "hero"))
+        {
+            return BadRequest(new { Error = "imageType must be one of: logo, hero." });
+        }
+
+        var tenantId = tenantContext.TenantId!.Value;
+        var tenant = await dbContext.Tenants.AsNoTracking().SingleAsync(x => x.Id == tenantId, cancellationToken);
+        if (tenant.SubscriptionPlan != DoneForYouPlan)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                Error = "Tenant is not eligible for agent-applied updates (requires Done-For-You plan)."
+            });
+        }
+
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new { Error = "No file provided." });
+        }
+
+        if (file.Length > MaxImageBytes)
+        {
+            return BadRequest(new { Error = "File size must not exceed 10 MB." });
+        }
+
+        string? contentType;
+        await using (var header = file.OpenReadStream())
+        {
+            contentType = await DetectImageContentTypeAsync(header, cancellationToken);
+        }
+
+        if (contentType is null)
+        {
+            return BadRequest(new { Error = "Only JPEG and PNG images are accepted." });
+        }
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var url = await r2StorageService.UploadImageAsync(
+                tenantId,
+                $"{normalizedImageType}-{Guid.NewGuid():N}",
+                stream,
+                contentType,
+                cancellationToken);
+
+            return Ok(new { url });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { Error = "Failed to upload image.", Details = ex.Message });
+        }
+    }
+
+    private static async Task<string?> DetectImageContentTypeAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        var header = new byte[8];
+        var read = await stream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, cancellationToken);
+
+        if (read >= 3 && header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF)
+        {
+            return "image/jpeg";
+        }
+
+        ReadOnlySpan<byte> pngSignature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        return read >= 8 && header.AsSpan(0, 8).SequenceEqual(pngSignature) ? "image/png" : null;
     }
 
     private static bool IsAction(string? value, string expected) =>
