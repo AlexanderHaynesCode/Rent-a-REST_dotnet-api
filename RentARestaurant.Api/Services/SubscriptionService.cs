@@ -14,6 +14,7 @@ public sealed class SubscriptionService(
     ITenantContext tenantContext,
     ITenantSubscriptionService tenantSubscriptionService,
     IOptions<StripeOptions> stripeOptions,
+    IOptions<AdminOptions> adminOptions,
     ILogger<SubscriptionService> logger) : ISubscriptionService
 {
     private const string Upgrade = "upgrade";
@@ -31,7 +32,8 @@ public sealed class SubscriptionService(
             SubscriptionPlans.GetMonthlyPriceUsd(tenant.SubscriptionPlan),
             !string.IsNullOrWhiteSpace(tenant.StripeSubscriptionId),
             row?.PendingPlan,
-            row?.PendingPlanEffectiveUtc);
+            row?.PendingPlanEffectiveUtc,
+            row?.Status);
     }
 
     public async Task<PreviewSubscriptionChangeResponse> PreviewChangeAsync(string targetPlan, CancellationToken cancellationToken)
@@ -93,6 +95,11 @@ public sealed class SubscriptionService(
     {
         var (tenant, row, normalizedTarget, changeType) = await ValidateChangeRequestAsync(targetPlan, cancellationToken);
 
+        if (changeType == Upgrade)
+        {
+            throw new ArgumentException("Upgrades must be paid through Stripe checkout.");
+        }
+
         var subscriptionService = new StripeApi.SubscriptionService();
         var subscription = await subscriptionService.GetAsync(tenant.StripeSubscriptionId, cancellationToken: cancellationToken);
         var item = GetSubscriptionItem(subscription);
@@ -116,68 +123,167 @@ public sealed class SubscriptionService(
             return new ChangeSubscriptionPlanResponse(tenant.SubscriptionPlan, tenant.SubscriptionState, 0m);
         }
 
-        if (changeType == Downgrade)
-        {
-            await ScheduleDowngradeAsync(subscription, item, normalizedTarget, cancellationToken);
+        await ScheduleDowngradeAsync(subscription, item, normalizedTarget, cancellationToken);
 
-            row.PendingPlan = normalizedTarget;
-            row.PendingPlanEffectiveUtc = item.CurrentPeriodEnd;
-            row.UpdatedUtc = DateTime.UtcNow;
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            return new ChangeSubscriptionPlanResponse(
-                tenant.SubscriptionPlan, tenant.SubscriptionState, 0m, row.PendingPlan, row.PendingPlanEffectiveUtc);
-        }
-
-        var updateOptions = new StripeApi.SubscriptionUpdateOptions
-        {
-            Items =
-            [
-                new StripeApi.SubscriptionItemOptions
-                {
-                    Id = item.Id,
-                    Price = GetPriceId(normalizedTarget),
-                }
-            ],
-            // A declined payment leaves the Stripe subscription on its original price (error_if_incomplete),
-            // so the DB is only touched after success.
-            ProrationBehavior = "always_invoice",
-            PaymentBehavior = "error_if_incomplete",
-            Expand = ["latest_invoice"],
-        };
-
-        var chargeOnboardingFee = ShouldChargeOnboardingFee(normalizedTarget, row);
-        if (chargeOnboardingFee)
-        {
-            updateOptions.AddInvoiceItems =
-                [new StripeApi.SubscriptionAddInvoiceItemOptions { Price = GetOnboardingFeePriceId() }];
-        }
-
-        StripeApi.Subscription updated;
-        try
-        {
-            updated = await subscriptionService.UpdateAsync(tenant.StripeSubscriptionId, updateOptions, cancellationToken: cancellationToken);
-        }
-        catch (StripeApi.StripeException ex)
-        {
-            logger.LogWarning(ex, "Stripe declined the upgrade charge for tenant {TenantId}", tenant.Id);
-            throw new SubscriptionPaymentDeclinedException(
-                "The upgrade payment was declined. Your subscription plan has not changed.");
-        }
-
-        var amountChargedUsd = (updated.LatestInvoice?.AmountPaid ?? 0) / 100m;
-
-        tenantSubscriptionService.ApplyStripeSubscription(row, updated);
-        if (chargeOnboardingFee)
-        {
-            row.OnboardingFeeCents = SubscriptionPlans.GetOnboardingFeeCents(normalizedTarget);
-            row.OnboardingFeePaidUtc = DateTime.UtcNow;
-        }
-        tenant.SubscriptionPlan = normalizedTarget;
+        row.PendingPlan = normalizedTarget;
+        row.PendingPlanEffectiveUtc = item.CurrentPeriodEnd;
+        row.UpdatedUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return new ChangeSubscriptionPlanResponse(tenant.SubscriptionPlan, tenant.SubscriptionState, amountChargedUsd);
+        return new ChangeSubscriptionPlanResponse(
+            tenant.SubscriptionPlan, tenant.SubscriptionState, 0m, row.PendingPlan, row.PendingPlanEffectiveUtc);
     }
+
+    public async Task<StripeRedirectResponse> CreateUpgradeCheckoutAsync(string returnUrl, CancellationToken cancellationToken)
+    {
+        var (tenant, row, targetPlan, changeType) = await ValidateChangeRequestAsync(SubscriptionPlans.DoneForYou, cancellationToken);
+        if (changeType != Upgrade)
+        {
+            throw new ArgumentException("Only an upgrade to Done-For-You can be paid through Checkout.");
+        }
+
+        var preview = await PreviewChangeAsync(targetPlan, cancellationToken);
+        var amountCents = (long)Math.Round(preview.AmountDueTodayUsd * 100m, MidpointRounding.AwayFromZero);
+        if (amountCents <= 0)
+        {
+            throw new InvalidOperationException("Upgrade amount due is not positive; cannot create a payment session.");
+        }
+
+        var onboardingFeeIncluded = ShouldChargeOnboardingFee(targetPlan, row);
+        var resolvedReturnUrl = ResolveReturnUrl(returnUrl);
+
+        var session = await new StripeApi.Checkout.SessionService().CreateAsync(
+            new StripeApi.Checkout.SessionCreateOptions
+            {
+                Mode = "payment",
+                Customer = tenant.StripeCustomerId,
+                ClientReferenceId = tenant.Id.ToString("D"),
+                SuccessUrl = AppendQuery(resolvedReturnUrl, "checkout=success"),
+                CancelUrl = AppendQuery(resolvedReturnUrl, "checkout=cancelled"),
+                LineItems =
+                [
+                    new StripeApi.Checkout.SessionLineItemOptions
+                    {
+                        Quantity = 1,
+                        PriceData = new StripeApi.Checkout.SessionLineItemPriceDataOptions
+                        {
+                            Currency = preview.Currency,
+                            UnitAmount = amountCents,
+                            ProductData = new StripeApi.Checkout.SessionLineItemPriceDataProductDataOptions
+                            {
+                                Name = onboardingFeeIncluded
+                                    ? "Upgrade to Done-For-You (prorated plan change + onboarding fee)"
+                                    : "Upgrade to Done-For-You (prorated plan change)",
+                            },
+                        },
+                    }
+                ],
+                Metadata = new Dictionary<string, string>
+                {
+                    ["subscription_change"] = Upgrade,
+                    ["tenant_id"] = tenant.Id.ToString("D"),
+                    ["target_plan"] = targetPlan,
+                    ["onboarding_fee_included"] = onboardingFeeIncluded ? "true" : "false",
+                },
+            },
+            cancellationToken: cancellationToken);
+
+        return new StripeRedirectResponse(session.Url);
+    }
+
+    public async Task<StripeRedirectResponse> CreateBillingPortalSessionAsync(string returnUrl, CancellationToken cancellationToken)
+    {
+        var tenant = await LoadTenantAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(tenant.StripeCustomerId))
+        {
+            throw new SubscriptionNotLinkedException("This tenant is not linked to a Stripe customer.");
+        }
+
+        var session = await new StripeApi.BillingPortal.SessionService().CreateAsync(
+            new StripeApi.BillingPortal.SessionCreateOptions
+            {
+                Customer = tenant.StripeCustomerId,
+                ReturnUrl = ResolveReturnUrl(returnUrl),
+            },
+            cancellationToken: cancellationToken);
+
+        return new StripeRedirectResponse(session.Url);
+    }
+
+    public async Task CompleteUpgradeAsync(Guid tenantId, string targetPlan, bool onboardingFeeIncluded, CancellationToken cancellationToken)
+    {
+        if (targetPlan != SubscriptionPlans.DoneForYou)
+        {
+            throw new ArgumentException("Only upgrades to Done-For-You are supported.");
+        }
+
+        var tenant = await dbContext.Tenants.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.Id == tenantId, cancellationToken)
+            ?? throw new InvalidOperationException($"Tenant {tenantId} not found.");
+
+        if (string.IsNullOrWhiteSpace(tenant.StripeSubscriptionId))
+        {
+            throw new SubscriptionNotLinkedException("Tenant has no Stripe subscription to upgrade.");
+        }
+
+        var subscriptionService = new StripeApi.SubscriptionService();
+        var subscription = await subscriptionService.GetAsync(tenant.StripeSubscriptionId, cancellationToken: cancellationToken);
+        var item = GetSubscriptionItem(subscription);
+        var targetPriceId = GetPriceId(targetPlan);
+
+        // Payment was already collected by Checkout, so the price switch must not generate another invoice.
+        if (item.Price.Id != targetPriceId)
+        {
+            subscription = await subscriptionService.UpdateAsync(
+                tenant.StripeSubscriptionId,
+                new StripeApi.SubscriptionUpdateOptions
+                {
+                    Items = [new StripeApi.SubscriptionItemOptions { Id = item.Id, Price = targetPriceId }],
+                    ProrationBehavior = "none",
+                },
+                cancellationToken: cancellationToken);
+        }
+
+        var row = await dbContext.TenantSubscriptions.IgnoreQueryFilters()
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
+        if (row is null)
+        {
+            row = new TenantSubscription { Id = Guid.NewGuid(), TenantId = tenantId, Plan = tenant.SubscriptionPlan };
+            dbContext.TenantSubscriptions.Add(row);
+        }
+
+        tenantSubscriptionService.ApplyStripeSubscription(row, subscription);
+        if (onboardingFeeIncluded && row.OnboardingFeePaidUtc is null)
+        {
+            row.OnboardingFeeCents = SubscriptionPlans.GetOnboardingFeeCents(targetPlan);
+            row.OnboardingFeePaidUtc = DateTime.UtcNow;
+        }
+
+        tenant.SubscriptionPlan = targetPlan;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Tenant {TenantId} upgraded to {Plan} after Checkout payment.", tenantId, targetPlan);
+    }
+
+    private string ResolveReturnUrl(string returnUrl)
+    {
+        if (!Uri.TryCreate(returnUrl?.Trim(), UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new ArgumentException("ReturnUrl must be an absolute http(s) URL.");
+        }
+
+        var origin = uri.GetLeftPart(UriPartial.Authority);
+        var allowed = adminOptions.Value.AllowedReturnOrigins
+            .Any(x => string.Equals(x.Trim().TrimEnd('/'), origin, StringComparison.OrdinalIgnoreCase));
+        if (!allowed)
+        {
+            throw new ArgumentException("ReturnUrl origin is not allowed.");
+        }
+
+        return uri.GetLeftPart(UriPartial.Path) + uri.Query;
+    }
+
+    private static string AppendQuery(string url, string query) =>
+        url + (url.Contains('?') ? "&" : "?") + query;
 
     private async Task ScheduleDowngradeAsync(
         StripeApi.Subscription subscription,

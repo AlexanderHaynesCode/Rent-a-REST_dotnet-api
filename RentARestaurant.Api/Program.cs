@@ -19,6 +19,8 @@ builder.Services.Configure<StripeOptions>(
     builder.Configuration.GetSection(StripeOptions.SectionName));
 builder.Services.Configure<MarketingOptions>(
     builder.Configuration.GetSection(MarketingOptions.SectionName));
+builder.Services.Configure<AdminOptions>(
+    builder.Configuration.GetSection(AdminOptions.SectionName));
 builder.Services.Configure<ProvisioningOptions>(
     builder.Configuration.GetSection(ProvisioningOptions.SectionName));
 builder.Services.Configure<EmailOptions>(

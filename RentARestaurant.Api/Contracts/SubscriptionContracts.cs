@@ -8,7 +8,15 @@ public sealed record AdminSubscriptionResponse(
     decimal MonthlyPriceUsd,
     bool IsLinkedToStripe,
     string? PendingPlan = null,
-    DateTime? PendingPlanEffectiveUtc = null);
+    DateTime? PendingPlanEffectiveUtc = null,
+    string? BillingStatus = null);
+
+public sealed record StripeRedirectRequest(
+    [Required]
+    [MaxLength(2048)]
+    string ReturnUrl);
+
+public sealed record StripeRedirectResponse(string Url);
 
 public sealed record PreviewSubscriptionChangeResponse(
     string CurrentPlan,

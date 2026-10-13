@@ -15,6 +15,7 @@ public class StripeWebhookController(
     ITenantProvisioningService tenantProvisioningService,
     IStripeCheckoutService stripeCheckoutService,
     ITenantSubscriptionService tenantSubscriptionService,
+    ISubscriptionService subscriptionService,
     IOptions<StripeOptions> stripeOptions,
     IWebHostEnvironment environment,
     ILogger<StripeWebhookController> logger) : ControllerBase
@@ -114,6 +115,29 @@ public class StripeWebhookController(
             return Ok(new { Processed = true });
         }
 
+        if (string.Equals(eventType, "invoice.paid", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(eventType, "invoice.payment_failed", StringComparison.OrdinalIgnoreCase))
+        {
+            var invoiceSubscriptionId = ReadInvoiceSubscriptionId(root);
+            if (string.IsNullOrWhiteSpace(invoiceSubscriptionId))
+            {
+                // One-off invoices carry no subscription.
+                return Ok(new { Processed = false });
+            }
+
+            try
+            {
+                await tenantSubscriptionService.SyncAsync(invoiceSubscriptionId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to sync subscription {SubscriptionId} after {EventType}", invoiceSubscriptionId, eventType);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { Error = "Failed to sync subscription." });
+            }
+
+            return Ok(new { Processed = true });
+        }
+
         if (!string.Equals(eventType, "checkout.session.completed", StringComparison.OrdinalIgnoreCase))
         {
             logger.LogInformation("Ignoring Stripe event type {EventType}", eventType);
@@ -123,6 +147,35 @@ public class StripeWebhookController(
         if (!TryReadCheckoutSessionObject(root, out var checkoutSessionElement))
         {
             return BadRequest(new { Error = "checkout.session.completed payload is missing the session object." });
+        }
+
+        if (string.Equals(ReadMetadata(checkoutSessionElement, "subscription_change"), "upgrade", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.Equals(ReadString(checkoutSessionElement, "payment_status"), "paid", StringComparison.OrdinalIgnoreCase))
+            {
+                return Ok(new { Processed = false });
+            }
+
+            if (!Guid.TryParse(ReadMetadata(checkoutSessionElement, "tenant_id"), out var upgradeTenantId))
+            {
+                return BadRequest(new { Error = "Upgrade checkout session is missing a valid tenant_id." });
+            }
+
+            var upgradeTargetPlan = ReadMetadata(checkoutSessionElement, "target_plan") ?? string.Empty;
+            var onboardingFeeIncluded = string.Equals(
+                ReadMetadata(checkoutSessionElement, "onboarding_fee_included"), "true", StringComparison.OrdinalIgnoreCase);
+
+            try
+            {
+                await subscriptionService.CompleteUpgradeAsync(upgradeTenantId, upgradeTargetPlan, onboardingFeeIncluded, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to apply paid upgrade for tenant {TenantId}", upgradeTenantId);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { Error = "Failed to apply upgrade." });
+            }
+
+            return Ok(new { Processed = true, TenantId = upgradeTenantId });
         }
 
         var provisioningSessionIdValue = ReadMetadata(checkoutSessionElement, "provisioning_session_id");
@@ -271,6 +324,32 @@ public class StripeWebhookController(
             }
 
             return null;
+        }
+
+        static string? ReadInvoiceSubscriptionId(JsonElement rootElement)
+        {
+            if (!rootElement.TryGetProperty("data", out var dataElement)
+                || dataElement.ValueKind != JsonValueKind.Object
+                || !dataElement.TryGetProperty("object", out var invoice)
+                || invoice.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            // Newer API versions nest it under parent.subscription_details; older ones expose it at the top level.
+            if (invoice.TryGetProperty("parent", out var parent)
+                && parent.ValueKind == JsonValueKind.Object
+                && parent.TryGetProperty("subscription_details", out var details)
+                && details.ValueKind == JsonValueKind.Object)
+            {
+                var nested = ReadString(details, "subscription");
+                if (!string.IsNullOrWhiteSpace(nested))
+                {
+                    return nested;
+                }
+            }
+
+            return ReadString(invoice, "subscription");
         }
     }
 }

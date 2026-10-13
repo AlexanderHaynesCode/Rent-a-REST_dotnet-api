@@ -53,9 +53,47 @@ public class AdminSubscriptionController(ISubscriptionService subscriptionServic
         {
             return Conflict(new { Error = ex.Message });
         }
-        catch (SubscriptionPaymentDeclinedException ex)
+        catch (ArgumentException ex)
         {
-            return StatusCode(StatusCodes.Status402PaymentRequired, new { Error = ex.Message });
+            return BadRequest(new { Error = ex.Message });
+        }
+    }
+
+    [HttpPost("upgrade-checkout")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<ActionResult<StripeRedirectResponse>> CreateUpgradeCheckout(
+        [FromBody] StripeRedirectRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await subscriptionService.CreateUpgradeCheckoutAsync(request.ReturnUrl, cancellationToken));
+        }
+        catch (SubscriptionNotLinkedException ex)
+        {
+            return Conflict(new { Error = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
+    }
+
+    [HttpPost("billing-portal")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<ActionResult<StripeRedirectResponse>> CreateBillingPortalSession(
+        [FromBody] StripeRedirectRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await subscriptionService.CreateBillingPortalSessionAsync(request.ReturnUrl, cancellationToken));
+        }
+        catch (SubscriptionNotLinkedException ex)
+        {
+            return Conflict(new { Error = ex.Message });
         }
         catch (ArgumentException ex)
         {

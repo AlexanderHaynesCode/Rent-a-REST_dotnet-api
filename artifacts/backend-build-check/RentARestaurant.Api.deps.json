@@ -11,8 +11,10 @@
           "AWSSDK.S3": "4.0.23.5",
           "Microsoft.AspNetCore.OpenApi": "10.0.7",
           "Microsoft.EntityFrameworkCore.Design": "10.0.7",
+          "Microsoft.OpenApi": "2.7.5",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "10.0.1",
-          "Resend": "0.17.0"
+          "Resend": "0.17.0",
+          "Stripe.net": "52.4.2"
         },
         "runtime": {
           "RentARestaurant.Api.dll": {}
@@ -47,7 +49,7 @@
       },
       "Microsoft.AspNetCore.OpenApi/10.0.7": {
         "dependencies": {
-          "Microsoft.OpenApi": "2.0.0"
+          "Microsoft.OpenApi": "2.7.5"
         },
         "runtime": {
           "lib/net10.0/Microsoft.AspNetCore.OpenApi.dll": {
@@ -393,11 +395,11 @@
           }
         }
       },
-      "Microsoft.OpenApi/2.0.0": {
+      "Microsoft.OpenApi/2.7.5": {
         "runtime": {
           "lib/net8.0/Microsoft.OpenApi.dll": {
-            "assemblyVersion": "2.0.0.0",
-            "fileVersion": "2.0.0.0"
+            "assemblyVersion": "2.7.5.0",
+            "fileVersion": "2.7.5.0"
           }
         }
       },
@@ -454,6 +456,18 @@
           "lib/net8.0/Resend.dll": {
             "assemblyVersion": "0.17.0.0",
             "fileVersion": "0.17.0.0"
+          }
+        }
+      },
+      "Stripe.net/52.4.2": {
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.3",
+          "System.Configuration.ConfigurationManager": "9.0.0"
+        },
+        "runtime": {
+          "lib/net9.0/Stripe.net.dll": {
+            "assemblyVersion": "52.4.2.0",
+            "fileVersion": "52.4.2.0"
           }
         }
       },
@@ -520,6 +534,25 @@
         },
         "runtime": {
           "lib/net9.0/System.Composition.TypedParts.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.24.52809"
+          }
+        }
+      },
+      "System.Configuration.ConfigurationManager/9.0.0": {
+        "dependencies": {
+          "System.Security.Cryptography.ProtectedData": "9.0.0"
+        },
+        "runtime": {
+          "lib/net9.0/System.Configuration.ConfigurationManager.dll": {
+            "assemblyVersion": "9.0.0.0",
+            "fileVersion": "9.0.24.52809"
+          }
+        }
+      },
+      "System.Security.Cryptography.ProtectedData/9.0.0": {
+        "runtime": {
+          "lib/net9.0/System.Security.Cryptography.ProtectedData.dll": {
             "assemblyVersion": "9.0.0.0",
             "fileVersion": "9.0.24.52809"
           }
@@ -638,12 +671,12 @@
       "path": "microsoft.extensions.dependencymodel/10.0.7",
       "hashPath": "microsoft.extensions.dependencymodel.10.0.7.nupkg.sha512"
     },
-    "Microsoft.OpenApi/2.0.0": {
+    "Microsoft.OpenApi/2.7.5": {
       "type": "package",
       "serviceable": true,
-      "sha512": "sha512-GGYLfzV/G/ct80OZ45JxnWP7NvMX1BCugn/lX7TH5o0lcVaviavsLMTxmFV2AybXWjbi3h6FF1vgZiTK6PXndw==",
-      "path": "microsoft.openapi/2.0.0",
-      "hashPath": "microsoft.openapi.2.0.0.nupkg.sha512"
+      "sha512": "sha512-0FA67RSnRM4tcBKqiqVu/HPdZ9+QOKbmeRjxRUGTCjPU4C0bmUhd97Dso7Yild5P7nOV6GxJ2xrK0Kv/O9xp0w==",
+      "path": "microsoft.openapi/2.7.5",
+      "hashPath": "microsoft.openapi.2.7.5.nupkg.sha512"
     },
     "Microsoft.VisualStudio.SolutionPersistence/1.0.52": {
       "type": "package",
@@ -686,6 +719,13 @@
       "sha512": "sha512-0lBwGywx1FNV/KEYz/FvEvM3JjWz/aBLqF76aHeffopY/NlHtOGksPCuaNvBzOmtuxtdBS4Xck6Um0o2BeLQVA==",
       "path": "resend/0.17.0",
       "hashPath": "resend.0.17.0.nupkg.sha512"
+    },
+    "Stripe.net/52.4.2": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-cap6WfPXE1WBoCVle151RLGpF5cQoOx+6sitBG8wuoDJaVVhscJjX3c3F6ldvwFUelqo0GxtM9odaq8Rn7sKmA==",
+      "path": "stripe.net/52.4.2",
+      "hashPath": "stripe.net.52.4.2.nupkg.sha512"
     },
     "System.CodeDom/6.0.0": {
       "type": "package",
@@ -735,6 +775,20 @@
       "sha512": "sha512-aRZlojCCGEHDKqh43jaDgaVpYETsgd7Nx4g1zwLKMtv4iTo0627715ajEFNpEEBTgLmvZuv8K0EVxc3sM4NWJA==",
       "path": "system.composition.typedparts/9.0.0",
       "hashPath": "system.composition.typedparts.9.0.0.nupkg.sha512"
+    },
+    "System.Configuration.ConfigurationManager/9.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-PdkuMrwDhXoKFo/JxISIi9E8L+QGn9Iquj2OKDWHB6Y/HnUOuBouF7uS3R4Hw3FoNmwwMo6hWgazQdyHIIs27A==",
+      "path": "system.configuration.configurationmanager/9.0.0",
+      "hashPath": "system.configuration.configurationmanager.9.0.0.nupkg.sha512"
+    },
+    "System.Security.Cryptography.ProtectedData/9.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-CJW+x/F6fmRQ7N6K8paasTw9PDZp4t7G76UjGNlSDgoHPF0h08vTzLYbLZpOLEJSg35d5wy2jCXGo84EN05DpQ==",
+      "path": "system.security.cryptography.protecteddata/9.0.0",
+      "hashPath": "system.security.cryptography.protecteddata.9.0.0.nupkg.sha512"
     }
   }
 }
