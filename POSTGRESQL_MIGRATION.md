@@ -31,6 +31,7 @@ Tenant (1) ──────── (1) RestaurantProfile
     ├──── (1:N) BusinessHour
     └──── (1:N) ProvisioningSession
     └──── (1:1) TenantSubscription
+    └──── (1:N) SubscriptionEvent
 ```
 
 ---
@@ -155,6 +156,35 @@ CREATE TABLE public.tenant_subscriptions (
 CREATE INDEX idx_tenant_subscriptions_stripe_customer_id ON tenant_subscriptions(stripe_customer_id);
 CREATE INDEX idx_tenant_subscriptions_status ON tenant_subscriptions(status);
 ```
+
+---
+
+### 2c. SubscriptionEvents Table
+
+Append-only audit log of subscription changes per tenant. Rows are written by the API (signup, upgrade, downgrade requested/canceled, and the Stripe-driven downgrade start and cancellation events), never updated or deleted. Upgrades are logged only by the app's own upgrade completion, not by webhook syncs.
+
+```sql
+CREATE TABLE public.subscription_events (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    event_type VARCHAR(40) NOT NULL,
+    from_plan VARCHAR(50),
+    to_plan VARCHAR(50),
+    status VARCHAR(40),
+    stripe_subscription_id VARCHAR(100),
+    effective_utc TIMESTAMP WITH TIME ZONE,
+    occurred_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT subscription_events_type_check CHECK (event_type IN (
+        'signup', 'upgrade', 'downgrade_requested', 'downgrade_canceled',
+        'downgrade_started', 'cancel_requested', 'cancel_reverted', 'canceled')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_subscription_events_tenant_occurred ON subscription_events(tenant_id, occurred_utc);
+```
+
+`effective_utc` is when the change takes effect (e.g. the period end for `downgrade_requested` and `cancel_requested`).
 
 ---
 

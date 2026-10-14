@@ -19,6 +19,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
     public DbSet<AgentChangeAudit> AgentChangeAudits => Set<AgentChangeAudit>();
     public DbSet<ProvisioningSession> ProvisioningSessions => Set<ProvisioningSession>();
     public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();
+    public DbSet<SubscriptionEvent> SubscriptionEvents => Set<SubscriptionEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -248,6 +249,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.HasOne(x => x.Tenant)
                 .WithOne()
                 .HasForeignKey<TenantSubscription>(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SubscriptionEvent>(entity =>
+        {
+            entity.ToTable("subscription_events", "public");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.TenantId, x.OccurredUtc });
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.TenantId).HasColumnName("tenant_id");
+            entity.Property(x => x.EventType).HasColumnName("event_type").HasMaxLength(40);
+            entity.Property(x => x.FromPlan).HasColumnName("from_plan").HasMaxLength(50);
+            entity.Property(x => x.ToPlan).HasColumnName("to_plan").HasMaxLength(50);
+            entity.Property(x => x.Status).HasColumnName("status").HasMaxLength(40);
+            entity.Property(x => x.StripeSubscriptionId).HasColumnName("stripe_subscription_id").HasMaxLength(100);
+            entity.Property(x => x.EffectiveUtc).HasColumnName("effective_utc");
+            entity.Property(x => x.OccurredUtc).HasColumnName("occurred_utc");
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

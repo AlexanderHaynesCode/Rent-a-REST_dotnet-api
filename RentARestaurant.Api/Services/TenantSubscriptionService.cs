@@ -22,6 +22,7 @@ public sealed class TenantSubscriptionService(
             .IgnoreQueryFilters()
             .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
 
+        var isNewRow = row is null;
         if (row is null)
         {
             row = new TenantSubscription { Id = Guid.NewGuid(), TenantId = tenantId };
@@ -29,6 +30,12 @@ public sealed class TenantSubscriptionService(
         }
 
         ApplyStripeSubscription(row, subscription);
+
+        // Log signup event in subscription_events table.
+        if (isNewRow)
+        {
+            AddEvent(tenantId, SubscriptionEventTypes.Signup, null, row.Plan, row.Status, row.StripeSubscriptionId);
+        }
 
         if (row.OnboardingFeePaidUtc is null)
         {
@@ -55,7 +62,30 @@ public sealed class TenantSubscriptionService(
             .GetAsync(stripeSubscriptionId, cancellationToken: cancellationToken);
 
         var previousPlan = row.Plan;
+        var previousPendingPlan = row.PendingPlan;
+        var previousCancelAtPeriodEnd = row.CancelAtPeriodEnd;
+        var previousStatus = row.Status;
         ApplyStripeSubscription(row, subscription);
+
+        // Upgrades are logged by CompleteUpgradeAsync, not here.
+        if (row.Plan != previousPlan && previousPendingPlan == row.Plan)
+        {
+            AddEvent(row.TenantId, SubscriptionEventTypes.DowngradeStarted, previousPlan, row.Plan, row.Status, row.StripeSubscriptionId);
+        }
+
+        if (row.CancelAtPeriodEnd != previousCancelAtPeriodEnd)
+        {
+            AddEvent(
+                row.TenantId,
+                row.CancelAtPeriodEnd ? SubscriptionEventTypes.CancelRequested : SubscriptionEventTypes.CancelReverted,
+                row.Plan, row.Plan, row.Status, row.StripeSubscriptionId,
+                row.CancelAtPeriodEnd ? row.CurrentPeriodEndUtc : null);
+        }
+
+        if (row.Status == "canceled" && previousStatus != "canceled")
+        {
+            AddEvent(row.TenantId, SubscriptionEventTypes.Canceled, row.Plan, null, row.Status, row.StripeSubscriptionId);
+        }
 
         if (row.Plan != previousPlan)
         {
@@ -109,6 +139,29 @@ public sealed class TenantSubscriptionService(
             row.PendingPlan = null;
             row.PendingPlanEffectiveUtc = null;
         }
+    }
+
+    public void AddEvent(
+        Guid tenantId,
+        string eventType,
+        string? fromPlan,
+        string? toPlan,
+        string? status,
+        string? stripeSubscriptionId,
+        DateTime? effectiveUtc = null)
+    {
+        dbContext.SubscriptionEvents.Add(new SubscriptionEvent
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            EventType = eventType,
+            FromPlan = fromPlan,
+            ToPlan = toPlan,
+            Status = status,
+            StripeSubscriptionId = stripeSubscriptionId,
+            EffectiveUtc = effectiveUtc,
+            OccurredUtc = DateTime.UtcNow,
+        });
     }
 
     private string? PlanForPriceId(string priceId)
