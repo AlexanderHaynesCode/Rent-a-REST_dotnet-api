@@ -77,6 +77,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.LogoUrl).HasColumnName("logo_url");
             entity.Property(x => x.HeroImageUrl).HasColumnName("hero_image_url");
             entity.Property(x => x.PrimaryCtaUrl).HasColumnName("primary_cta_url");
+            entity.Property(x => x.Address).HasColumnName("address").HasMaxLength(300);
+            entity.Property(x => x.PhoneNumber).HasColumnName("phone_number").HasMaxLength(30);
             entity.Property(x => x.UpdatedUtc).HasColumnName("updated_utc");
             entity.HasOne(x => x.Tenant)
                 .WithOne(x => x.Profile)

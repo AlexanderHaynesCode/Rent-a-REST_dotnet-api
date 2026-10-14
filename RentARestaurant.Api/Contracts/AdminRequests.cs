@@ -8,7 +8,9 @@ public sealed record UpdateBrandingRequest(
     string SecondaryHexColor,
     string? LogoUrl,
     string? HeroImageUrl,
-    string? PrimaryCtaUrl);
+    string? PrimaryCtaUrl,
+    string? Address = null,
+    string? PhoneNumber = null);
 
 public sealed record UpsertBusinessHourRequest(
     DayOfWeek DayOfWeek,

@@ -89,6 +89,8 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             profile.LogoUrl,
             profile.HeroImageUrl,
             profile.PrimaryCtaUrl,
+            profile.Address,
+            profile.PhoneNumber,
             menu,
             resolvedHours.Select(hour => new BusinessHourResponse(
                 hour!.DayOfWeek,

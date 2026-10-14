@@ -11,6 +11,8 @@ public sealed record PublicRestaurantResponse(
     string? LogoUrl,
     string? HeroImageUrl,
     string? PrimaryCtaUrl,  // CTA = Call To Action button like "Order Now/Online"
+    string? Address,
+    string? PhoneNumber,
     IReadOnlyList<PublicMenuCategoryResponse> Menu,
     IReadOnlyList<BusinessHourResponse> Hours,
     IReadOnlyList<DateSpecificHourSnapshot>? DateSpecificHours = null);

@@ -128,6 +128,8 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             profile.LogoUrl,
             profile.HeroImageUrl,
             profile.PrimaryCtaUrl,
+            profile.Address,
+            profile.PhoneNumber,
             menu,
             hours.Select(hour => new BusinessHourResponse(
                 hour.DayOfWeek,
@@ -155,6 +157,8 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         profile.LogoUrl = request.LogoUrl;
         profile.HeroImageUrl = request.HeroImageUrl;
         profile.PrimaryCtaUrl = request.PrimaryCtaUrl;
+        profile.Address = request.Address;
+        profile.PhoneNumber = request.PhoneNumber;
         profile.UpdatedUtc = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -382,6 +386,8 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             profile.LogoUrl = snapshot.LogoUrl;
             profile.HeroImageUrl = snapshot.HeroImageUrl;
             profile.PrimaryCtaUrl = snapshot.PrimaryCtaUrl;
+            profile.Address = snapshot.Address;
+            profile.PhoneNumber = snapshot.PhoneNumber;
             profile.UpdatedUtc = DateTime.UtcNow;
         }
 

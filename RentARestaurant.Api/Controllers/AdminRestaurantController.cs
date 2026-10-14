@@ -18,6 +18,12 @@ public class AdminRestaurantController(
     IR2StorageService r2StorageService,
     IRestaurantAdminService restaurantAdminService) : ControllerBase
 {
+    private static readonly System.Text.RegularExpressions.Regex PhoneNumberPattern =
+        new(@"^[0-9+\-().\s]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     [HttpGet]
     [RequireTenantContext]
     [RequireAdminAccess]
@@ -120,8 +126,21 @@ public class AdminRestaurantController(
             SecondaryHexColor = request.SecondaryHexColor.Trim(),
             LogoUrl = request.LogoUrl?.Trim(),
             HeroImageUrl = request.HeroImageUrl?.Trim(),
-            PrimaryCtaUrl = request.PrimaryCtaUrl?.Trim()
+            PrimaryCtaUrl = request.PrimaryCtaUrl?.Trim(),
+            Address = NullIfBlank(request.Address),
+            PhoneNumber = NullIfBlank(request.PhoneNumber)
         };
+
+        if (trimmedRequest.Address?.Length > 300)
+        {
+            return BadRequest("Address must be 300 characters or fewer.");
+        }
+
+        if (trimmedRequest.PhoneNumber is not null &&
+            (trimmedRequest.PhoneNumber.Length > 30 || !PhoneNumberPattern.IsMatch(trimmedRequest.PhoneNumber)))
+        {
+            return BadRequest("Phone number must be 30 characters or fewer and contain only digits, spaces, and + - ( ) . characters.");
+        }
 
         var updated = await restaurantAdminService.UpdateBrandingAsync(tenantContext.TenantId!.Value, trimmedRequest, cancellationToken);
         if (!updated)

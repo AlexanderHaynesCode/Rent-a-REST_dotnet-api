@@ -4,7 +4,9 @@ This is the backend API for Rentaurants (originally known as Rent-a-RESTaurant).
 
 Customers can check out our services and pricing at the main marketing site (marketing-client-app). They pay via Stripe and account management is handled by Clerk.
 
-We offer two subscription tiers: Self-Service and Done-For-You. Both give the tenant access to the admin portal (admin-client-app). Self-Service tenants can manually update their restaurant site (restaurant-client-app) themselves via the admin portal. Done-For-You tenants get additional functionality (which is basically the flaghship feature of Rentaurants) that allow them to send email update requests to Rentaurants and our AI agent pipeline handles updating their site for them. A success/fail/clarification email is sent back to the tenant shortly after they initiate their request.
+We offer two subscription tiers: Self-Service and Done-For-You. Both give the tenant access to the admin portal (admin-client-app). Self-Service tenants can manually update their restaurant site (restaurant-client-app) themselves via the admin portal. Done-For-You tenants get additional functionality (which is basically the flaghship feature of Rentaurants) that allow them to send email update requests to Rentaurants and our AI agent pipeline handles updating their site for them. A success/fail/clarification email is sent back to the tenant shortly after they initiate their request. 
+
+The dotnet-api, postgreSQL DB, and the four agent services are hosted in Railway. The three frontends (marketing-client-app, admin-client-app, and restaurant-client-app) are hosted in Cloudflare.
 
 ## Structure
 

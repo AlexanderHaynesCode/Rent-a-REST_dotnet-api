@@ -172,6 +172,8 @@ CREATE TABLE restaurant_profiles (
     logo_url TEXT,
     hero_image_url TEXT,
     primary_cta_url TEXT,
+    address VARCHAR(300),
+    phone_number VARCHAR(30),
     updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -190,6 +192,14 @@ CREATE INDEX idx_restaurant_profiles_updated_utc ON restaurant_profiles(updated_
 ```sql
 ALTER TABLE restaurant_profiles
 ADD COLUMN announcement TEXT NOT NULL DEFAULT '';
+```
+
+**For existing databases, add the optional address and phone number columns:**
+
+```sql
+ALTER TABLE restaurant_profiles
+ADD COLUMN IF NOT EXISTS address VARCHAR(300),
+ADD COLUMN IF NOT EXISTS phone_number VARCHAR(30);
 ```
 
 ---
@@ -381,6 +391,8 @@ CREATE TABLE restaurant_profiles (
     logo_url TEXT,
     hero_image_url TEXT,
     primary_cta_url TEXT,
+    address VARCHAR(300),
+    phone_number VARCHAR(30),
     updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     CONSTRAINT display_name_not_empty CHECK (display_name != ''),

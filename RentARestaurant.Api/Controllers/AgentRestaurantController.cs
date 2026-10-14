@@ -380,7 +380,9 @@ public class AgentRestaurantController(
             branding.SecondaryHexColor ?? profile.SecondaryHexColor,
             branding.LogoUrl ?? profile.LogoUrl,
             branding.HeroImageUrl ?? profile.HeroImageUrl,
-            branding.PrimaryCtaUrl ?? profile.PrimaryCtaUrl);
+            branding.PrimaryCtaUrl ?? profile.PrimaryCtaUrl,
+            profile.Address,
+            profile.PhoneNumber);
 
         var updated = await restaurantAdminService.UpdateBrandingAsync(tenantId, merged, cancellationToken);
         if (updated)
