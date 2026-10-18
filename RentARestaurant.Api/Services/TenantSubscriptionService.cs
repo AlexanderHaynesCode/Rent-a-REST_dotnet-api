@@ -13,39 +13,6 @@ public sealed class TenantSubscriptionService(
     IOptions<StripeOptions> stripeOptions,
     ILogger<TenantSubscriptionService> logger) : ITenantSubscriptionService
 {
-    public async Task RecordSignupAsync(Guid tenantId, string stripeSubscriptionId, CancellationToken cancellationToken)
-    {
-        var subscription = await new StripeApi.SubscriptionService()
-            .GetAsync(stripeSubscriptionId, cancellationToken: cancellationToken);
-
-        var row = await dbContext.TenantSubscriptions
-            .IgnoreQueryFilters()
-            .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
-
-        var isNewRow = row is null;
-        if (row is null)
-        {
-            row = new TenantSubscription { Id = Guid.NewGuid(), TenantId = tenantId };
-            dbContext.TenantSubscriptions.Add(row);
-        }
-
-        ApplyStripeSubscription(row, subscription);
-
-        // Log signup event in subscription_events table.
-        if (isNewRow)
-        {
-            AddEvent(tenantId, SubscriptionEventTypes.Signup, null, row.Plan, row.Status, row.StripeSubscriptionId);
-        }
-
-        if (row.OnboardingFeePaidUtc is null)
-        {
-            row.OnboardingFeeCents = SubscriptionPlans.GetOnboardingFeeCents(row.Plan);
-            row.OnboardingFeePaidUtc = row.OnboardingFeeCents > 0 ? DateTime.UtcNow : null;
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-    }
-
     public async Task SyncAsync(string stripeSubscriptionId, CancellationToken cancellationToken)
     {
         var row = await dbContext.TenantSubscriptions
@@ -66,6 +33,13 @@ public sealed class TenantSubscriptionService(
         var previousCancelAtPeriodEnd = row.CancelAtPeriodEnd;
         var previousStatus = row.Status;
         ApplyStripeSubscription(row, subscription);
+
+        // If the plan is brand new then log a signup event.
+        var utcNow = DateTime.UtcNow;
+        if (row.CreatedUtc >= utcNow.AddMinutes(-1) && row.CreatedUtc <= utcNow)
+        {
+            AddEvent(row.TenantId, SubscriptionEventTypes.Signup, null, row.Plan, row.Status, row.StripeSubscriptionId);
+        }
 
         // Upgrades are logged by CompleteUpgradeAsync, not here.
         if (row.Plan != previousPlan && previousPendingPlan == row.Plan)

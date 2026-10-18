@@ -126,7 +126,7 @@ public class StripeWebhookController(
             }
 
             try
-            {
+            {                
                 await tenantSubscriptionService.SyncAsync(invoiceSubscriptionId, cancellationToken);
             }
             catch (Exception ex)
@@ -227,18 +227,6 @@ public class StripeWebhookController(
                 stripeCustomerId,
                 stripeSubscriptionId,
                 cancellationToken);
-
-            if (!string.IsNullOrWhiteSpace(stripeSubscriptionId))
-            {
-                try
-                {
-                    await tenantSubscriptionService.RecordSignupAsync(result.TenantId, stripeSubscriptionId, cancellationToken);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Tenant {TenantId} provisioned but saving subscription metadata failed", result.TenantId);
-                }
-            }
 
             return Ok(new
             {
