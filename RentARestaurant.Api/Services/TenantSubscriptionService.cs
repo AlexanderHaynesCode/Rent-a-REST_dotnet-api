@@ -34,22 +34,15 @@ public sealed class TenantSubscriptionService(
         var previousStatus = row.Status;
         ApplyStripeSubscription(row, subscription);
 
-        // If the plan is brand new then log a signup event.
-        var utcNow = DateTime.UtcNow;
-        if (row.CreatedUtc >= utcNow.AddMinutes(-1) && row.CreatedUtc <= utcNow)
-        {
-            AddEvent(row.TenantId, SubscriptionEventTypes.Signup, null, row.Plan, row.Status, row.StripeSubscriptionId);
-        }
-
         // Upgrades are logged by CompleteUpgradeAsync, not here.
         if (row.Plan != previousPlan && previousPendingPlan == row.Plan)
         {
-            AddEvent(row.TenantId, SubscriptionEventTypes.DowngradeStarted, previousPlan, row.Plan, row.Status, row.StripeSubscriptionId);
+            AddSubscriptionEvent(row.TenantId, SubscriptionEventTypes.DowngradeStarted, previousPlan, row.Plan, row.Status, row.StripeSubscriptionId);
         }
 
         if (row.CancelAtPeriodEnd != previousCancelAtPeriodEnd)
         {
-            AddEvent(
+            AddSubscriptionEvent(
                 row.TenantId,
                 row.CancelAtPeriodEnd ? SubscriptionEventTypes.CancelRequested : SubscriptionEventTypes.CancelReverted,
                 row.Plan, row.Plan, row.Status, row.StripeSubscriptionId,
@@ -58,7 +51,7 @@ public sealed class TenantSubscriptionService(
 
         if (row.Status == "canceled" && previousStatus != "canceled")
         {
-            AddEvent(row.TenantId, SubscriptionEventTypes.Canceled, row.Plan, null, row.Status, row.StripeSubscriptionId);
+            AddSubscriptionEvent(row.TenantId, SubscriptionEventTypes.Canceled, row.Plan, null, row.Status, row.StripeSubscriptionId);
         }
 
         if (row.Plan != previousPlan)
@@ -115,7 +108,7 @@ public sealed class TenantSubscriptionService(
         }
     }
 
-    public void AddEvent(
+    public void AddSubscriptionEvent(
         Guid tenantId,
         string eventType,
         string? fromPlan,

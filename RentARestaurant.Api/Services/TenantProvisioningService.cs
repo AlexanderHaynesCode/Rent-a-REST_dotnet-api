@@ -107,12 +107,24 @@ public class TenantProvisioningService(
                 CloseTime = new TimeOnly(22, 0),
                 IsClosed = i == 1
             });
-        }        
+        }  
+
+        var subscriptionEvent = new SubscriptionEvent
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            EventType = SubscriptionEventTypes.Signup,
+            Status = "active",
+            StripeSubscriptionId = tenant.StripeSubscriptionId
+        };
+
+        dbContext.SubscriptionEvents.Add(subscriptionEvent);
 
         dbContext.Tenants.Add(tenant);
         dbContext.TenantUsers.Add(tenantUser);
         dbContext.RestaurantProfiles.Add(profile);
         dbContext.BusinessHours.AddRange(businessHours);
+        dbContext.SubscriptionEvents.Add(subscriptionEvent);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 

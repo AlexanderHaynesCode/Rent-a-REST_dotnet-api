@@ -115,7 +115,7 @@ public sealed class SubscriptionService(
         if (changeType == CancelDowngrade)
         {
             await ReleaseScheduleAsync(subscription, cancellationToken);
-            tenantSubscriptionService.AddEvent(
+            tenantSubscriptionService.AddSubscriptionEvent(
                 tenant.Id, SubscriptionEventTypes.DowngradeCanceled, tenant.SubscriptionPlan, row.PendingPlan,
                 row.Status, row.StripeSubscriptionId);
             row.PendingPlan = null;
@@ -131,7 +131,7 @@ public sealed class SubscriptionService(
         row.PendingPlan = normalizedTarget;
         row.PendingPlanEffectiveUtc = item.CurrentPeriodEnd;
         row.UpdatedUtc = DateTime.UtcNow;
-        tenantSubscriptionService.AddEvent(
+        tenantSubscriptionService.AddSubscriptionEvent(
             tenant.Id, SubscriptionEventTypes.DowngradeRequested, tenant.SubscriptionPlan, normalizedTarget,
             row.Status, row.StripeSubscriptionId, row.PendingPlanEffectiveUtc);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -267,7 +267,7 @@ public sealed class SubscriptionService(
         // Skip on webhook retries where the tenant is already on the target plan.
         if (tenant.SubscriptionPlan != targetPlan)
         {
-            tenantSubscriptionService.AddEvent(
+            tenantSubscriptionService.AddSubscriptionEvent(
                 tenantId, SubscriptionEventTypes.Upgrade, tenant.SubscriptionPlan, targetPlan,
                 row.Status, row.StripeSubscriptionId);
         }

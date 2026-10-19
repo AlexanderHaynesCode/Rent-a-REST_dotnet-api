@@ -11,7 +11,7 @@ public interface ITenantSubscriptionService
     void ApplyStripeSubscription(TenantSubscription row, Stripe.Subscription subscription);
 
     /// <summary>Stages a subscription_events row; the caller's SaveChangesAsync persists it.</summary>
-    void AddEvent(
+    void AddSubscriptionEvent(
         Guid tenantId,
         string eventType,
         string? fromPlan,
