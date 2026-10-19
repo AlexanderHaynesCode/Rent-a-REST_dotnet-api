@@ -583,6 +583,7 @@ CREATE TABLE agent_submissions (
 );
 
 CREATE INDEX idx_agent_submissions_tenant_status ON agent_submissions(tenant_id, status);
+CREATE INDEX idx_agent_submissions_tenant_received ON agent_submissions(tenant_id, received_utc);
 
 CREATE TABLE agent_change_audits (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

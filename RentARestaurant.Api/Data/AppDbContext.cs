@@ -148,6 +148,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.ToTable("agent_submissions", "public");
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasIndex(x => new { x.TenantId, x.ReceivedUtc });
             entity.Property(x => x.Id).HasColumnName("id");
             entity.Property(x => x.TenantId).HasColumnName("tenant_id");
             entity.Property(x => x.Channel).HasColumnName("channel").HasMaxLength(20);

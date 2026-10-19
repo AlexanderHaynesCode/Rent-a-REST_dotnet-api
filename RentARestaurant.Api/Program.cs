@@ -42,6 +42,7 @@ builder.Services.AddResend(o =>
 });
 
 builder.Services.AddHttpClient();
+builder.Services.AddMemoryCache();
 
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<ITenantProvisioningService, TenantProvisioningService>();

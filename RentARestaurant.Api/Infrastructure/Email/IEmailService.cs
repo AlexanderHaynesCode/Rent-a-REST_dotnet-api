@@ -19,6 +19,12 @@ public interface IEmailService
         IReadOnlyList<string> rejectedSummary,
         CancellationToken cancellationToken);
 
+    Task SendAgentRateLimitedEmailAsync(
+        string toEmail,
+        string restaurantName,
+        int maxPerHour,
+        CancellationToken cancellationToken);
+
     Task SendAgentClarificationNeededEmailAsync(
         string toEmail,
         string restaurantName,

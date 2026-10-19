@@ -133,6 +133,34 @@ public class ResendEmailService(
         logger.LogInformation("Agent-not-applied email sent to {Email}", toEmail);
     }
 
+    public async Task SendAgentRateLimitedEmailAsync(
+        string toEmail,
+        string restaurantName,
+        int maxPerHour,
+        CancellationToken cancellationToken)
+    {
+        var opts = options.Value;
+
+        var message = new EmailMessage
+        {
+            From = $"{opts.FromName} <{opts.FromAddress}>",
+            Subject = $"Update request limit reached \u2014 {restaurantName}",
+            HtmlBody = $"""
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+                  <h2>Please try again later</h2>
+                  <p>We couldn't process your latest update request for <strong>{System.Net.WebUtility.HtmlEncode(restaurantName)}</strong>
+                  because the limit of {maxPerHour} requests per hour has been reached.</p>
+                  <p>Please wait up to an hour and send the request again. Combining several changes into one email helps.</p>
+                  <p>The Rentaurants Team</p>
+                </div>
+                """
+        };
+        message.To.Add(toEmail);
+
+        await resend.EmailSendAsync(message, cancellationToken);
+        logger.LogInformation("Agent-rate-limited email sent to {Email}", toEmail);
+    }
+
     public async Task SendAgentClarificationNeededEmailAsync(
         string toEmail,
         string restaurantName,
