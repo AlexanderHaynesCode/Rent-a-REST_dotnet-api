@@ -46,7 +46,9 @@ public sealed record AgentBrandingChange(
     string? SecondaryHexColor,
     string? LogoUrl,
     string? HeroImageUrl,
-    string? PrimaryCtaUrl);
+    string? PrimaryCtaUrl,
+    string? Address,
+    string? PhoneNumber);
 
 /// <summary>
 /// All fields are optional so the validator only needs to send what actually changed.
