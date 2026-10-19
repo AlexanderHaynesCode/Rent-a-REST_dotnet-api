@@ -114,6 +114,7 @@ public class TenantProvisioningService(
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             EventType = SubscriptionEventTypes.Signup,
+            ToPlan = normalizedPlan,
             Status = "active",
             StripeSubscriptionId = tenant.StripeSubscriptionId
         };
