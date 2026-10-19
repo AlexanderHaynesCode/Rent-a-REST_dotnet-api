@@ -201,7 +201,10 @@ public class StripeWebhookController(
             });
         }
 
-        await stripeCheckoutService.MarkProvisioningProcessingAsync(provisioningSession.Id, cancellationToken);
+        if (!await stripeCheckoutService.MarkProvisioningProcessingAsync(provisioningSession.Id, cancellationToken))
+        {
+            return StatusCode(StatusCodes.Status409Conflict, new { Error = "Provisioning is already in progress." });
+        }
 
         var stripeCustomerId = ReadString(checkoutSessionElement, "customer");
         var stripeSubscriptionId = ReadString(checkoutSessionElement, "subscription");

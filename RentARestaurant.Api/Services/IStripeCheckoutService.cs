@@ -15,7 +15,7 @@ public interface IStripeCheckoutService
 
     Task MarkProvisioningCompletedAsync(Guid provisioningSessionId, Guid tenantId, string tenantSlug, string? stripeCustomerId, string? stripeSubscriptionId, CancellationToken cancellationToken);
 
-    Task MarkProvisioningProcessingAsync(Guid provisioningSessionId, CancellationToken cancellationToken);
+    Task<bool> MarkProvisioningProcessingAsync(Guid provisioningSessionId, CancellationToken cancellationToken);
 
     Task MarkProvisioningFailedAsync(Guid provisioningSessionId, string reason, CancellationToken cancellationToken);
 }

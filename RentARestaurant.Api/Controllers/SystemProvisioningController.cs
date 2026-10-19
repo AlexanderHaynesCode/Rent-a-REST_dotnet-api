@@ -124,7 +124,12 @@ public class SystemProvisioningController(
                 session.FailureReason));
         }
 
-        await stripeCheckoutService.MarkProvisioningProcessingAsync(session.Id, cancellationToken);
+        if (!await stripeCheckoutService.MarkProvisioningProcessingAsync(session.Id, cancellationToken))
+        {
+            // Another caller owns provisioning; report its current (untracked) status.
+            var current = await stripeCheckoutService.GetProvisioningStatusAsync(checkoutSessionId, cancellationToken);
+            return Ok(current);
+        }
 
         var checkoutCompleted = new ProvisionTenantRequest(
             session.RestaurantName,

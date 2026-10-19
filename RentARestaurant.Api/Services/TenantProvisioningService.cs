@@ -118,8 +118,6 @@ public class TenantProvisioningService(
             StripeSubscriptionId = tenant.StripeSubscriptionId
         };
 
-        dbContext.SubscriptionEvents.Add(subscriptionEvent);
-
         dbContext.Tenants.Add(tenant);
         dbContext.TenantUsers.Add(tenantUser);
         dbContext.RestaurantProfiles.Add(profile);

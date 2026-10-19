@@ -112,17 +112,16 @@ public sealed class StripeCheckoutService(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task MarkProvisioningProcessingAsync(Guid provisioningSessionId, CancellationToken cancellationToken)
+    public async Task<bool> MarkProvisioningProcessingAsync(Guid provisioningSessionId, CancellationToken cancellationToken)
     {
-        var session = await dbContext.ProvisioningSessions.FirstOrDefaultAsync(x => x.Id == provisioningSessionId, cancellationToken);
-        if (session is null)
-        {
-            return;
-        }
+        // Single conditional UPDATE so only one caller wins the claim.
+        var updated = await dbContext.ProvisioningSessions
+            .Where(x => x.Id == provisioningSessionId && x.Status != "processing" && x.Status != "ready")
+            .ExecuteUpdateAsync(
+                s => s.SetProperty(x => x.Status, "processing").SetProperty(x => x.UpdatedUtc, DateTime.UtcNow),
+                cancellationToken);
 
-        session.Status = "processing";
-        session.UpdatedUtc = DateTime.UtcNow;
-        await dbContext.SaveChangesAsync(cancellationToken);
+        return updated > 0;
     }
 
     public async Task MarkProvisioningFailedAsync(Guid provisioningSessionId, string reason, CancellationToken cancellationToken)
