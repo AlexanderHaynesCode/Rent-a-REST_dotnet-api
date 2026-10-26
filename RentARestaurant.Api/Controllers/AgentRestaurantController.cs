@@ -477,8 +477,12 @@ public class AgentRestaurantController(
             case AgentItemAction.Delete:
                 if (change.CategoryId is { } deleteCategoryId)
                 {
+                    var deleteCategoryName = await dbContext.MenuCategories.AsNoTracking()
+                        .Where(x => x.Id == deleteCategoryId && x.TenantId == tenantId)
+                        .Select(x => x.Name)
+                        .SingleOrDefaultAsync(cancellationToken);
                     var deleted = await restaurantAdminService.DeleteMenuCategoryAsync(tenantId, deleteCategoryId, cancellationToken);
-                    if (deleted) summary.Add($"Deleted menu category {deleteCategoryId}.");
+                    if (deleted) summary.Add($"Deleted menu category '{deleteCategoryName}'.");
                 }
                 break;
         }
@@ -554,8 +558,12 @@ public class AgentRestaurantController(
             case AgentItemAction.Delete:
                 if (change.ItemId is { } deleteItemId)
                 {
+                    var deleteItemName = await dbContext.MenuItems.AsNoTracking()
+                        .Where(x => x.Id == deleteItemId && x.TenantId == tenantId)
+                        .Select(x => x.Name)
+                        .SingleOrDefaultAsync(cancellationToken);
                     var deleted = await restaurantAdminService.DeleteMenuItemAsync(tenantId, deleteItemId, cancellationToken);
-                    if (deleted) summary.Add($"Deleted menu item {deleteItemId}.");
+                    if (deleted) summary.Add($"Deleted menu item '{deleteItemName}'.");
                 }
                 break;
         }
