@@ -14,6 +14,10 @@ public class ResendEmailService(
     private const string UpdatesEmail = "updates@rentaurants.com";
     private const string DoneForYouGuideUrl = "https://rentaurants.com/done-for-you-guide";
 
+    // Replies to agent emails must reach the mailbox the IMAP adapter polls, not the From address.
+    private static string AgentReplyTo(EmailOptions opts) =>
+        string.IsNullOrWhiteSpace(opts.AgentReplyTo) ? UpdatesEmail : opts.AgentReplyTo;
+
     public async Task SendWelcomeEmailAsync(string toEmail, string restaurantName, string slug, string subscriptionPlan, CancellationToken cancellationToken)
     {
         var opts = options.Value;
@@ -81,6 +85,7 @@ public class ResendEmailService(
         var message = new EmailMessage
         {
             From = $"{opts.FromName} <{opts.FromAddress}>",
+            ReplyTo = AgentReplyTo(opts),
             Subject = $"Your Rentaurants website has been updated \u2014 {restaurantName}",
             HtmlBody = $"""
                 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
@@ -91,7 +96,8 @@ public class ResendEmailService(
                   </ul>
                   {notAppliedHtml}
                   <p>If something doesn't look right, reply to this email and we'll help, or these changes can be
-                  rolled back until <strong>{rollbackExpiresUtc:yyyy-MM-dd}</strong> (reference: {auditId}).</p>
+                  rolled back until <strong>{rollbackExpiresUtc:yyyy-MM-dd}</strong> (reference: {auditId}).
+                  To roll back, reply with "Undo the last change" or "Go back to reference {auditId}".</p>
                   <p>The Rentaurants Team</p>
                 </div>
                 """
@@ -114,6 +120,7 @@ public class ResendEmailService(
         var message = new EmailMessage
         {
             From = $"{opts.FromName} <{opts.FromAddress}>",
+            ReplyTo = AgentReplyTo(opts),
             Subject = $"We couldn't apply your update \u2014 {restaurantName}",
             HtmlBody = $"""
                 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
@@ -133,6 +140,74 @@ public class ResendEmailService(
         logger.LogInformation("Agent-not-applied email sent to {Email}", toEmail);
     }
 
+    public async Task SendAgentRollbackAppliedEmailAsync(
+        string toEmail,
+        string restaurantName,
+        IReadOnlyList<string> revertedSummary,
+        DateTime restoredToBeforeUtc,
+        CancellationToken cancellationToken)
+    {
+        var opts = options.Value;
+        var revertedHtml = revertedSummary.Count == 0
+            ? string.Empty
+            : $"""
+              <p>These changes were undone:</p>
+              <ul>{string.Join(string.Empty, revertedSummary.Select(line => $"<li>{System.Net.WebUtility.HtmlEncode(line)}</li>"))}</ul>
+              """;
+
+        var message = new EmailMessage
+        {
+            From = $"{opts.FromName} <{opts.FromAddress}>",
+            ReplyTo = AgentReplyTo(opts),
+            Subject = $"Your Rentaurants website has been rolled back — {restaurantName}",
+            HtmlBody = $"""
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+                  <h2>Your website has been rolled back</h2>
+                  <p><strong>{System.Net.WebUtility.HtmlEncode(restaurantName)}</strong> is back to how it looked before
+                  {restoredToBeforeUtc:yyyy-MM-dd HH:mm} UTC.</p>
+                  {revertedHtml}
+                  <p>Any edits made to your website since then, including ones made in the admin portal, were undone as well.</p>
+                  <p>The Rentaurants Team</p>
+                </div>
+                """
+        };
+        message.To.Add(toEmail);
+
+        await resend.EmailSendAsync(message, cancellationToken);
+        logger.LogInformation("Agent-rollback-applied email sent to {Email}", toEmail);
+    }
+
+    public async Task SendAgentRollbackNotAppliedEmailAsync(
+        string toEmail,
+        string restaurantName,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        var opts = options.Value;
+
+        var message = new EmailMessage
+        {
+            From = $"{opts.FromName} <{opts.FromAddress}>",
+            ReplyTo = AgentReplyTo(opts),
+            Subject = $"We couldn't roll back your website — {restaurantName}",
+            HtmlBody = $"""
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+                  <h2>No changes were made</h2>
+                  <p>We received your request to undo a change on <strong>{System.Net.WebUtility.HtmlEncode(restaurantName)}</strong>, but couldn't roll it back:</p>
+                  <ul>
+                    <li>{System.Net.WebUtility.HtmlEncode(reason)}</li>
+                  </ul>
+                  <p>Reply to this email if you need anything else.</p>
+                  <p>The Rentaurants Team</p>
+                </div>
+                """
+        };
+        message.To.Add(toEmail);
+
+        await resend.EmailSendAsync(message, cancellationToken);
+        logger.LogInformation("Agent-rollback-not-applied email sent to {Email}", toEmail);
+    }
+
     public async Task SendAgentRateLimitedEmailAsync(
         string toEmail,
         string restaurantName,
@@ -144,6 +219,7 @@ public class ResendEmailService(
         var message = new EmailMessage
         {
             From = $"{opts.FromName} <{opts.FromAddress}>",
+            ReplyTo = AgentReplyTo(opts),
             Subject = $"Update request limit reached \u2014 {restaurantName}",
             HtmlBody = $"""
                 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
@@ -173,6 +249,7 @@ public class ResendEmailService(
         var message = new EmailMessage
         {
             From = $"{opts.FromName} <{opts.FromAddress}>",
+            ReplyTo = AgentReplyTo(opts),
             Subject = $"We need a bit more info to update your website \u2014 {restaurantName}",
             HtmlBody = $"""
                 <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">

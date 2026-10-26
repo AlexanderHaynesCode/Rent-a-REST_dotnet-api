@@ -7,5 +7,5 @@ public sealed class AgentOptions
     public string InternalApiKey { get; set; } = string.Empty;
 
     /// <summary>Max submissions accepted per tenant in any rolling hour (clarification replies count).</summary>
-    public int MaxSubmissionsPerHour { get; set; } = 8;
+    public int MaxSubmissionsPerHour { get; set; } = 80;
 }

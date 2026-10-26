@@ -11,6 +11,13 @@ public sealed record AgentApplyResponse(
     IReadOnlyList<string> AppliedSummary,
     IReadOnlyList<string> RejectedSummary);
 
+public sealed record AgentRollbackResponse(
+    bool RolledBack,
+    Guid? AuditId,
+    DateTime? OriginalChangeAppliedUtc,
+    IReadOnlyList<string> RevertedSummary,
+    string? Reason);
+
 public sealed record AgentSubmissionResponse(
     Guid Id,
     Guid TenantId,

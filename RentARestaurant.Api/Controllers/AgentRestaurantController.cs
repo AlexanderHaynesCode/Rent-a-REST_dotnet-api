@@ -23,6 +23,7 @@ public class AgentRestaurantController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
     IRestaurantAdminService restaurantAdminService,
+    IAgentRollbackService agentRollbackService,
     IEmailService emailService,
     IR2StorageService r2StorageService) : ControllerBase
 {
@@ -193,33 +194,69 @@ public class AgentRestaurantController(
     {
         var tenantId = tenantContext.TenantId!.Value;
 
-        var audit = await dbContext.AgentChangeAudits
-            .SingleOrDefaultAsync(x => x.Id == auditId && x.TenantId == tenantId, cancellationToken);
-        if (audit is null)
+        var result = await agentRollbackService.RollbackAsync(tenantId, auditId, cancellationToken);
+
+        return result.Outcome switch
         {
-            return NotFound(new { Error = "Audit record not found for this tenant." });
+            AgentRollbackOutcome.RolledBack => NoContent(),
+            AgentRollbackOutcome.NotFound => NotFound(new { Error = "Audit record not found for this tenant." }),
+            _ => BadRequest(new { Error = result.Reason })
+        };
+    }
+
+    /// <summary>
+    /// Rollback requested by a tenant's email. Unlike <see cref="Rollback(Guid, CancellationToken)"/> this also updates the
+    /// submission and emails the owner. A null AuditId means the most recent change that can still be rolled back.
+    /// Business outcomes such as "nothing to undo" are a 200 with RolledBack=false so the executor doesn't mark the
+    /// submission Failed.
+    /// </summary>
+    [HttpPost("rollback")]
+    public async Task<ActionResult<AgentRollbackResponse>> RollbackFromSubmission(
+        [FromBody] RollbackAgentChangeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = tenantContext.TenantId!.Value;
+
+        var tenant = await dbContext.Tenants.SingleAsync(x => x.Id == tenantId, cancellationToken);
+        if (tenant.SubscriptionPlan != DoneForYouPlan)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                Error = "Tenant is not eligible for agent-applied updates (requires Done-For-You plan)."
+            });
         }
 
-        if (audit.RolledBack)
+        var submission = await dbContext.AgentSubmissions
+            .SingleOrDefaultAsync(x => x.Id == request.SubmissionId && x.TenantId == tenantId, cancellationToken);
+        if (submission is null)
         {
-            return BadRequest(new { Error = "This change has already been rolled back." });
+            return NotFound(new { Error = "Submission not found for this tenant." });
         }
 
-        if (DateTime.UtcNow > audit.RollbackExpiresUtc)
-        {
-            return BadRequest(new { Error = "The rollback window for this change has expired." });
-        }
+        var result = await agentRollbackService.RollbackAsync(tenantId, request.AuditId, cancellationToken);
 
-        var snapshot = JsonSerializer.Deserialize<PublicRestaurantResponse>(audit.PreChangeSnapshotJson, JsonOptions)
-            ?? throw new InvalidOperationException("Failed to deserialize pre-change snapshot.");
-
-        await restaurantAdminService.RestoreSnapshotAsync(tenantId, snapshot, cancellationToken);
-
-        audit.RolledBack = true;
-        audit.RolledBackUtc = DateTime.UtcNow;
+        submission.Status = result.Succeeded ? AgentSubmissionStatus.Applied : AgentSubmissionStatus.Rejected;
+        submission.RejectionReason = result.Succeeded ? submission.RejectionReason : result.Reason;
+        submission.UpdatedUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return NoContent();
+        var ownerEmail = await GetOwnerEmailAsync(tenantId, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(ownerEmail))
+        {
+            if (result.Succeeded)
+            {
+                await emailService.SendAgentRollbackAppliedEmailAsync(
+                    ownerEmail, tenant.Name, result.RevertedSummary, result.OriginalChangeAppliedUtc!.Value, cancellationToken);
+            }
+            else
+            {
+                await emailService.SendAgentRollbackNotAppliedEmailAsync(
+                    ownerEmail, tenant.Name, result.Reason!, cancellationToken);
+            }
+        }
+
+        return Ok(new AgentRollbackResponse(
+            result.Succeeded, result.AuditId, result.OriginalChangeAppliedUtc, result.RevertedSummary, result.Reason));
     }
 
     /// <summary>

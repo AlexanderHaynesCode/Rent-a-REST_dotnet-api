@@ -7,4 +7,5 @@ public sealed class EmailOptions
     public string ApiKey { get; set; } = string.Empty;
     public string FromAddress { get; set; } = string.Empty;
     public string FromName { get; set; } = "Rentaurants";
+    public string AgentReplyTo { get; set; } = "updates@rentaurants.com";
 }

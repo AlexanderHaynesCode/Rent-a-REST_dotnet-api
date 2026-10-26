@@ -67,6 +67,13 @@ public sealed record ApplyAgentChangeSetRequest(
     string SourceChannel,
     AgentChangeSet ChangeSet);
 
+/// <summary>
+/// AuditId null means "the tenant's most recent change that can still be rolled back".
+/// </summary>
+public sealed record RollbackAgentChangeRequest(
+    Guid SubmissionId,
+    Guid? AuditId);
+
 public sealed record CreateAgentSubmissionRequest(
     string Channel,
     string SenderIdentifier,

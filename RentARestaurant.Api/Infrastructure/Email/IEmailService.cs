@@ -19,6 +19,19 @@ public interface IEmailService
         IReadOnlyList<string> rejectedSummary,
         CancellationToken cancellationToken);
 
+    Task SendAgentRollbackAppliedEmailAsync(
+        string toEmail,
+        string restaurantName,
+        IReadOnlyList<string> revertedSummary,
+        DateTime restoredToBeforeUtc,
+        CancellationToken cancellationToken);
+
+    Task SendAgentRollbackNotAppliedEmailAsync(
+        string toEmail,
+        string restaurantName,
+        string reason,
+        CancellationToken cancellationToken);
+
     Task SendAgentRateLimitedEmailAsync(
         string toEmail,
         string restaurantName,

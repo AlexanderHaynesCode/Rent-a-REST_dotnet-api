@@ -50,6 +50,7 @@ builder.Services.AddScoped<IEmailService, ResendEmailService>();
 builder.Services.AddScoped<IMediaNamespaceProvisioner, LocalMediaNamespaceProvisioner>();
 builder.Services.AddScoped<ITenantAccessService, TenantAccessService>();
 builder.Services.AddScoped<IRestaurantAdminService, RestaurantAdminService>();
+builder.Services.AddScoped<IAgentRollbackService, AgentRollbackService>();
 builder.Services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<ITenantSubscriptionService, TenantSubscriptionService>();
