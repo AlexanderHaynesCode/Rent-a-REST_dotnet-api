@@ -9,7 +9,13 @@ public sealed record AdminSubscriptionResponse(
     bool IsLinkedToStripe,
     string? PendingPlan = null,
     DateTime? PendingPlanEffectiveUtc = null,
-    string? BillingStatus = null);
+    string? BillingStatus = null,
+    bool CancelAtPeriodEnd = false,
+    DateTime? CurrentPeriodEndUtc = null);
+
+public sealed record SetSubscriptionCancellationRequest(bool CancelAtPeriodEnd);
+
+public sealed record SetSubscriptionCancellationResponse(bool CancelAtPeriodEnd, DateTime? CurrentPeriodEndUtc);
 
 public sealed record StripeRedirectRequest(
     [Required]

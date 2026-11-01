@@ -20,10 +20,12 @@ public class StripeWebhookController(
     IWebHostEnvironment environment,
     ILogger<StripeWebhookController> logger) : ControllerBase
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     [HttpPost]
     public async Task<IActionResult> Handle(CancellationToken cancellationToken)
     {
-        logger.LogInformation("Alexxx Handling Stripe webhook request.");
+        logger.LogInformation("Handling Stripe webhook request.");
         using var reader = new StreamReader(Request.Body, Encoding.UTF8);
         var rawBody = await reader.ReadToEndAsync(cancellationToken);
 
@@ -36,7 +38,7 @@ public class StripeWebhookController(
         {
             logger.LogInformation("Accepting development browser trigger for Stripe webhook test.");
 
-            var payload = JsonSerializer.Deserialize<StripeWebhookRequest>(rawBody);
+            var payload = JsonSerializer.Deserialize<StripeWebhookRequest>(rawBody, JsonOptions);
             if (payload is null)
             {
                 return BadRequest(new { Error = "Invalid webhook payload." });
@@ -53,16 +55,33 @@ public class StripeWebhookController(
                 return BadRequest(new { Error = "Checkout payload is required for checkout.session.completed." });
             }
 
-            var result = await tenantProvisioningService.ProvisionTenantAsync(payload.CheckoutCompleted, cancellationToken);
-
-            return Ok(new
+            try
             {
-                Processed = true,
-                payload.EventId,
-                result.TenantId,
-                result.Slug,
-                result.MediaNamespace
-            });
+                var result = await tenantProvisioningService.ProvisionTenantAsync(payload.CheckoutCompleted, cancellationToken);
+
+                return Ok(new
+                {
+                    Processed = true,
+                    payload.EventId,
+                    result.TenantId,
+                    result.Slug,
+                    result.MediaNamespace
+                });
+            } 
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error handling Stripe webhook.");
+                return StatusCode(500, new { Error = "Internal server error." });
+            }      
+
+            // return Ok(new
+            // {
+            //     Processed = true,
+            //     payload.EventId,
+            //     result.TenantId,
+            //     result.Slug,
+            //     result.MediaNamespace
+            // });
         }
 
         if (!Request.Headers.TryGetValue("Stripe-Signature", out var signatureHeader) || string.IsNullOrWhiteSpace(signatureHeader.ToString()))

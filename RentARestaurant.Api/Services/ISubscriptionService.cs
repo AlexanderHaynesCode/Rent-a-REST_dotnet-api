@@ -11,6 +11,9 @@ public interface ISubscriptionService
     /// <summary>Schedules a downgrade or cancels a pending one. Upgrades go through <see cref="CreateUpgradeCheckoutAsync"/>.</summary>
     Task<ChangeSubscriptionPlanResponse> ChangePlanAsync(string targetPlan, CancellationToken cancellationToken);
 
+    /// <summary>Schedules or reverts cancellation at the end of the paid period. Idempotent.</summary>
+    Task<SetSubscriptionCancellationResponse> SetCancellationAsync(bool cancelAtPeriodEnd, CancellationToken cancellationToken);
+
     Task<StripeRedirectResponse> CreateUpgradeCheckoutAsync(string returnUrl, CancellationToken cancellationToken);
 
     Task<StripeRedirectResponse> CreateBillingPortalSessionAsync(string returnUrl, CancellationToken cancellationToken);

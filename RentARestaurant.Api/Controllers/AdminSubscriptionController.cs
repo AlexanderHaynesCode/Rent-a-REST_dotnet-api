@@ -59,6 +59,27 @@ public class AdminSubscriptionController(ISubscriptionService subscriptionServic
         }
     }
 
+    [HttpPut("cancellation")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<ActionResult<SetSubscriptionCancellationResponse>> SetCancellation(
+        [FromBody] SetSubscriptionCancellationRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await subscriptionService.SetCancellationAsync(request.CancelAtPeriodEnd, cancellationToken));
+        }
+        catch (SubscriptionNotLinkedException ex)
+        {
+            return Conflict(new { Error = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { Error = ex.Message });
+        }
+    }
+
     [HttpPost("upgrade-checkout")]
     [RequireTenantContext]
     [RequireAdminAccess]

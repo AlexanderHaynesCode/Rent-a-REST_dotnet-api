@@ -5,6 +5,7 @@ using RentARestaurant.Api.Data;
 using RentARestaurant.Api.Domain.Entities;
 using RentARestaurant.Api.Infrastructure.Email;
 using RentARestaurant.Api.Infrastructure.Storage;
+using StripeApi = Stripe;
 
 namespace RentARestaurant.Api.Services;
 
@@ -12,6 +13,7 @@ public class TenantProvisioningService(
     AppDbContext dbContext,
     IMediaNamespaceProvisioner mediaNamespaceProvisioner,
     IEmailService emailService,
+    ITenantSubscriptionService tenantSubscriptionService,
     ILogger<TenantProvisioningService> logger) : ITenantProvisioningService
 {
     private static readonly Regex SlugSanitizerRegex = new("[^a-z0-9-]", RegexOptions.Compiled);
@@ -50,6 +52,16 @@ public class TenantProvisioningService(
             throw new ArgumentException("OwnerEmail is required.");
         }
 
+        if (string.IsNullOrWhiteSpace(request.StripeCustomerId))
+        {
+            throw new ArgumentException("StripeCustomerId is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.StripeSubscriptionId))
+        {
+            throw new ArgumentException("StripeSubscriptionId is required.");
+        }
+
         var externalUserId = request.OwnerExternalUserId.Trim();
 
         var existingMembership = await dbContext.TenantUsers
@@ -63,6 +75,7 @@ public class TenantProvisioningService(
 
         var slug = await BuildUniqueSlugAsync(request.RequestedSlug ?? request.RestaurantName, cancellationToken);
         var tenantId = Guid.NewGuid();
+        const string Active = "active";
 
         var tenant = new Tenant
         {
@@ -70,11 +83,11 @@ public class TenantProvisioningService(
             Name = request.RestaurantName.Trim(),
             Slug = slug,
             CustomDomain = request.CustomDomain,
-            StripeCustomerId = string.IsNullOrWhiteSpace(request.StripeCustomerId) ? null : request.StripeCustomerId.Trim(),
-            StripeSubscriptionId = string.IsNullOrWhiteSpace(request.StripeSubscriptionId) ? null : request.StripeSubscriptionId.Trim(),
+            StripeCustomerId = request.StripeCustomerId.Trim(),
+            StripeSubscriptionId = request.StripeSubscriptionId.Trim(),
             IsActive = true,
             SubscriptionPlan = normalizedPlan,
-            SubscriptionState = string.IsNullOrWhiteSpace(request.StripeSubscriptionId) ? "trialing" : "active"
+            SubscriptionState = Active
         };
 
         var tenantUser = new TenantUser
@@ -115,15 +128,28 @@ public class TenantProvisioningService(
             TenantId = tenantId,
             EventType = SubscriptionEventTypes.Signup,
             ToPlan = normalizedPlan,
-            Status = "active",
+            Status = Active,
             StripeSubscriptionId = tenant.StripeSubscriptionId
         };
+
+        // Fetch before staging any rows so a Stripe failure leaves nothing half-written.
+        var stripeSubscription = await new StripeApi.SubscriptionService()
+            .GetAsync(tenant.StripeSubscriptionId, cancellationToken: cancellationToken);
+
+        var tenantSubscription = new TenantSubscription
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Plan = normalizedPlan
+        };
+        tenantSubscriptionService.ApplyStripeSubscription(tenantSubscription, stripeSubscription);
 
         dbContext.Tenants.Add(tenant);
         dbContext.TenantUsers.Add(tenantUser);
         dbContext.RestaurantProfiles.Add(profile);
         dbContext.BusinessHours.AddRange(businessHours);
         dbContext.SubscriptionEvents.Add(subscriptionEvent);
+        dbContext.TenantSubscriptions.Add(tenantSubscription);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 

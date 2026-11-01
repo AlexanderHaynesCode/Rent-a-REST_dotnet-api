@@ -33,7 +33,79 @@ public sealed class SubscriptionService(
             !string.IsNullOrWhiteSpace(tenant.StripeSubscriptionId),
             row?.PendingPlan,
             row?.PendingPlanEffectiveUtc,
-            row?.Status);
+            row?.Status,
+            row?.CancelAtPeriodEnd ?? false,
+            row?.CurrentPeriodEndUtc);
+    }
+
+    public async Task<SetSubscriptionCancellationResponse> SetCancellationAsync(bool cancelAtPeriodEnd, CancellationToken cancellationToken)
+    {
+        var tenant = await LoadTenantAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(tenant.StripeCustomerId) || string.IsNullOrWhiteSpace(tenant.StripeSubscriptionId))
+        {
+            throw new SubscriptionNotLinkedException(
+                "This tenant is not linked to a live Stripe subscription (it was likely provisioned outside real Stripe checkout).");
+        }
+
+        var row = await LoadSubscriptionRowAsync(tenant.Id, cancellationToken);
+        var subscriptionService = new StripeApi.SubscriptionService();
+        var subscription = await subscriptionService.GetAsync(tenant.StripeSubscriptionId, cancellationToken: cancellationToken);
+
+        if (row is null)
+        {
+            row = new TenantSubscription { Id = Guid.NewGuid(), TenantId = tenant.Id, Plan = tenant.SubscriptionPlan };
+            dbContext.TenantSubscriptions.Add(row);
+        }
+
+        var previousCancelAtPeriodEnd = row.CancelAtPeriodEnd;
+        var previousPendingPlan = row.PendingPlan;
+
+        if (subscription.CancelAtPeriodEnd != cancelAtPeriodEnd)
+        {
+            try
+            {
+                // A pending downgrade schedule would otherwise still change the plan at period end.
+                if (cancelAtPeriodEnd)
+                {
+                    await ReleaseScheduleAsync(subscription, cancellationToken);
+                }
+
+                subscription = await subscriptionService.UpdateAsync(
+                    tenant.StripeSubscriptionId,
+                    new StripeApi.SubscriptionUpdateOptions { CancelAtPeriodEnd = cancelAtPeriodEnd },
+                    cancellationToken: cancellationToken);
+            }
+            catch
+            {
+                // The schedule may already be released; resync so the local row matches Stripe.
+                var current = await subscriptionService.GetAsync(tenant.StripeSubscriptionId, cancellationToken: CancellationToken.None);
+                tenantSubscriptionService.ApplyStripeSubscription(row, current);
+                await dbContext.SaveChangesAsync(CancellationToken.None);
+                throw;
+            }
+        }
+
+        tenantSubscriptionService.ApplyStripeSubscription(row, subscription);
+
+        if (previousPendingPlan is not null && row.PendingPlan is null)
+        {
+            tenantSubscriptionService.AddSubscriptionEvent(
+                tenant.Id, SubscriptionEventTypes.DowngradeCanceled, tenant.SubscriptionPlan, previousPendingPlan,
+                row.Status, row.StripeSubscriptionId);
+        }
+
+        if (row.CancelAtPeriodEnd != previousCancelAtPeriodEnd)
+        {
+            // Logged here because the webhook sync will no longer see this transition.
+            tenantSubscriptionService.AddSubscriptionEvent(
+                tenant.Id,
+                row.CancelAtPeriodEnd ? SubscriptionEventTypes.CancelRequested : SubscriptionEventTypes.CancelReverted,
+                null, null, row.Status, row.StripeSubscriptionId,
+                row.CancelAtPeriodEnd ? row.CurrentPeriodEndUtc : null);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new SetSubscriptionCancellationResponse(row.CancelAtPeriodEnd, row.CurrentPeriodEndUtc);
     }
 
     public async Task<PreviewSubscriptionChangeResponse> PreviewChangeAsync(string targetPlan, CancellationToken cancellationToken)
@@ -377,6 +449,11 @@ public sealed class SubscriptionService(
         {
             throw new SubscriptionNotLinkedException(
                 "This tenant is not linked to a live Stripe subscription (it was likely provisioned outside real Stripe checkout).");
+        }
+
+        if (row?.CancelAtPeriodEnd == true)
+        {
+            throw new ArgumentException("Your subscription is scheduled to cancel. Keep your subscription before changing plans.");
         }
 
         if (normalizedTarget == tenant.SubscriptionPlan)

@@ -38,7 +38,7 @@ public class TenantResolutionMiddleware(RequestDelegate next)
         {
             var tenantByDomain = await dbContext.Tenants
                 .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.CustomDomain != null && x.CustomDomain.ToLower() == host);
+                .FirstOrDefaultAsync(x => x.CustomDomain != null && x.CustomDomain.ToLower() == host && x.IsActive);
 
             if (tenantByDomain is not null)
             {

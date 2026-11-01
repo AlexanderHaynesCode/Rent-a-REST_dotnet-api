@@ -45,21 +45,30 @@ public sealed class TenantSubscriptionService(
             AddSubscriptionEvent(
                 row.TenantId,
                 row.CancelAtPeriodEnd ? SubscriptionEventTypes.CancelRequested : SubscriptionEventTypes.CancelReverted,
-                row.Plan, row.Plan, row.Status, row.StripeSubscriptionId,
+                null, null, row.Status, row.StripeSubscriptionId,
                 row.CancelAtPeriodEnd ? row.CurrentPeriodEndUtc : null);
         }
 
-        if (row.Status == "canceled" && previousStatus != "canceled")
+        var isCanceled = row.Status == "canceled";
+        var isNewlyCanceled = isCanceled && previousStatus != "canceled";
+
+        if (isNewlyCanceled)
         {
-            AddSubscriptionEvent(row.TenantId, SubscriptionEventTypes.Canceled, row.Plan, null, row.Status, row.StripeSubscriptionId);
+            AddSubscriptionEvent(row.TenantId, SubscriptionEventTypes.Canceled, null, null, row.Status, row.StripeSubscriptionId);
         }
 
-        if (row.Plan != previousPlan)
+        if (row.Plan != previousPlan || isNewlyCanceled)
         {
             var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == row.TenantId, cancellationToken);
             if (tenant is not null)
             {
                 tenant.SubscriptionPlan = row.Plan;
+                if (isCanceled)
+                {
+                    // Data is retained; only access is turned off.
+                    tenant.SubscriptionState = "canceled";
+                    tenant.IsActive = false;
+                }
             }
         }
 
