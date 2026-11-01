@@ -63,6 +63,37 @@ public class ResendEmailService(
         logger.LogInformation("Welcome email sent to {Email} for restaurant {Slug}", toEmail, slug);
     }
 
+    public async Task SendDoneForYouUpgradeEmailAsync(string toEmail, string restaurantName, CancellationToken cancellationToken)
+    {
+        var opts = options.Value;
+        var safeRestaurantName = System.Net.WebUtility.HtmlEncode(restaurantName);
+
+        var message = new EmailMessage
+        {
+            From = $"{opts.FromName} <{opts.FromAddress}>",
+            Subject = $"You're now on Done-For-You \u2014 {restaurantName}",
+            HtmlBody = $"""
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+                  <h2>Welcome to Done-For-You!</h2>
+                  <p>Your upgrade for <strong>{safeRestaurantName}</strong> is complete.</p>
+                  <h3>Your Done-For-You website updates</h3>
+                  <p>Enjoy easy website updates that don't require signing in to an admin portal. Your plan now includes website updates by email. Send your request to
+                  <a href="mailto:{UpdatesEmail}">{UpdatesEmail}</a> from the email address registered to your Rentaurants account.
+                  Describe the changes in the message body; the subject is optional.</p>
+                  <p>If we need more detail before applying the changes, we will reply to ask.
+                  You can also attach menu notes, a logo, or a hero image.</p>
+                  <p>See the <a href="{DoneForYouGuideUrl}">Done-For-You update guide</a> for supported fields and examples.
+                  For help, email <a href="mailto:help@rentaurants.com">help@rentaurants.com</a>.</p>
+                  <p>The Rentaurants Team</p>
+                </div>
+                """
+        };
+        message.To.Add(toEmail);
+
+        await resend.EmailSendAsync(message, cancellationToken);
+        logger.LogInformation("Done-For-You upgrade email sent to {Email} for restaurant {Restaurant}", toEmail, restaurantName);
+    }
+
     public async Task SendAgentChangesAppliedEmailAsync(
         string toEmail,
         string restaurantName,

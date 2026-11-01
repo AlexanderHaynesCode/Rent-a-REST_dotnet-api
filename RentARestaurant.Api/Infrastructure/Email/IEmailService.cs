@@ -4,6 +4,8 @@ public interface IEmailService
 {
     Task SendWelcomeEmailAsync(string toEmail, string restaurantName, string slug, string subscriptionPlan, CancellationToken cancellationToken);
 
+    Task SendDoneForYouUpgradeEmailAsync(string toEmail, string restaurantName, CancellationToken cancellationToken);
+
     Task SendAgentChangesAppliedEmailAsync(
         string toEmail,
         string restaurantName,

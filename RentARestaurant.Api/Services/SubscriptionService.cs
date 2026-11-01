@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using RentARestaurant.Api.Contracts;
 using RentARestaurant.Api.Data;
 using RentARestaurant.Api.Domain.Entities;
+using RentARestaurant.Api.Infrastructure.Email;
 using RentARestaurant.Api.Infrastructure.Stripe;
 using RentARestaurant.Api.Infrastructure.Tenancy;
 using StripeApi = Stripe;
@@ -15,6 +16,7 @@ public sealed class SubscriptionService(
     ITenantSubscriptionService tenantSubscriptionService,
     IOptions<StripeOptions> stripeOptions,
     IOptions<AdminOptions> adminOptions,
+    IEmailService emailService,
     ILogger<SubscriptionService> logger) : ISubscriptionService
 {
     private const string Upgrade = "upgrade";
@@ -337,7 +339,8 @@ public sealed class SubscriptionService(
         }
 
         // Skip on webhook retries where the tenant is already on the target plan.
-        if (tenant.SubscriptionPlan != targetPlan)
+        var planChanged = tenant.SubscriptionPlan != targetPlan;
+        if (planChanged)
         {
             tenantSubscriptionService.AddSubscriptionEvent(
                 tenantId, SubscriptionEventTypes.Upgrade, tenant.SubscriptionPlan, targetPlan,
@@ -347,6 +350,27 @@ public sealed class SubscriptionService(
         tenant.SubscriptionPlan = targetPlan;
         await dbContext.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Tenant {TenantId} upgraded to {Plan} after Checkout payment.", tenantId, targetPlan);
+
+        if (planChanged)
+        {
+            try
+            {
+                var ownerEmail = await dbContext.TenantUsers.IgnoreQueryFilters()
+                    .Where(x => x.TenantId == tenantId)
+                    .OrderBy(x => x.Role == "Owner" ? 0 : 1)
+                    .Select(x => x.Email)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (!string.IsNullOrWhiteSpace(ownerEmail))
+                {
+                    await emailService.SendDoneForYouUpgradeEmailAsync(ownerEmail, tenant.Name, cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                // The upgrade is already committed; a failed email must not make Stripe retry the webhook.
+                logger.LogWarning(ex, "Failed to send Done-For-You upgrade email for tenant {TenantId}", tenantId);
+            }
+        }
     }
 
     private string ResolveReturnUrl(string returnUrl)
