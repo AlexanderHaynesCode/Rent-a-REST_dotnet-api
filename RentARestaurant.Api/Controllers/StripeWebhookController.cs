@@ -197,6 +197,37 @@ public class StripeWebhookController(
             return Ok(new { Processed = true, TenantId = upgradeTenantId });
         }
 
+        if (string.Equals(ReadMetadata(checkoutSessionElement, "subscription_change"), "reactivate", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Guid.TryParse(ReadMetadata(checkoutSessionElement, "tenant_id"), out var reactivationTenantId))
+            {
+                return BadRequest(new { Error = "Reactivation checkout session is missing a valid tenant_id." });
+            }
+
+            var reactivationSubscriptionId = ReadString(checkoutSessionElement, "subscription");
+            if (string.IsNullOrWhiteSpace(reactivationSubscriptionId))
+            {
+                return BadRequest(new { Error = "Reactivation checkout session is missing the subscription id." });
+            }
+
+            var reactivationPlan = ReadMetadata(checkoutSessionElement, "target_plan") ?? string.Empty;
+            var reactivationFeeIncluded = string.Equals(
+                ReadMetadata(checkoutSessionElement, "onboarding_fee_included"), "true", StringComparison.OrdinalIgnoreCase);
+
+            try
+            {
+                await subscriptionService.CompleteReactivationAsync(
+                    reactivationTenantId, reactivationPlan, reactivationFeeIncluded, reactivationSubscriptionId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to reactivate tenant {TenantId}", reactivationTenantId);
+                return StatusCode(StatusCodes.Status500InternalServerError, new { Error = "Failed to reactivate tenant." });
+            }
+
+            return Ok(new { Processed = true, TenantId = reactivationTenantId });
+        }
+
         var provisioningSessionIdValue = ReadMetadata(checkoutSessionElement, "provisioning_session_id");
         if (!Guid.TryParse(provisioningSessionIdValue, out var provisioningSessionId))
         {

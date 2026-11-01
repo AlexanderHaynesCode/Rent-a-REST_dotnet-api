@@ -14,6 +14,7 @@ public sealed class SubscriptionService(
     AppDbContext dbContext,
     ITenantContext tenantContext,
     ITenantSubscriptionService tenantSubscriptionService,
+    ITenantAccessService tenantAccessService,
     IOptions<StripeOptions> stripeOptions,
     IOptions<AdminOptions> adminOptions,
     IEmailService emailService,
@@ -22,6 +23,8 @@ public sealed class SubscriptionService(
     private const string Upgrade = "upgrade";
     private const string Downgrade = "downgrade";
     private const string CancelDowngrade = "cancel_downgrade";
+    private const string Reactivate = "reactivate";
+    private const string Active = "active";
 
     public async Task<AdminSubscriptionResponse> GetCurrentAsync(CancellationToken cancellationToken)
     {
@@ -371,6 +374,148 @@ public sealed class SubscriptionService(
                 logger.LogWarning(ex, "Failed to send Done-For-You upgrade email for tenant {TenantId}", tenantId);
             }
         }
+    }
+
+    public async Task<ReactivationInfoResponse?> GetReactivationInfoAsync(string externalUserId, CancellationToken cancellationToken)
+    {
+        var tenant = await LoadTenantForAdminAsync(externalUserId, cancellationToken);
+        if (tenant is null)
+        {
+            return null;
+        }
+
+        var row = await dbContext.TenantSubscriptions.IgnoreQueryFilters()
+            .SingleOrDefaultAsync(x => x.TenantId == tenant.Id, cancellationToken);
+
+        string[] plans = [SubscriptionPlans.SelfService, SubscriptionPlans.DoneForYou];
+        var options = plans
+            .Select(plan => new ReactivationPlanOption(
+                plan,
+                SubscriptionPlans.GetMonthlyPriceUsd(plan),
+                ShouldChargeOnboardingFee(plan, row) ? SubscriptionPlans.GetOnboardingFeeCents(plan) / 100m : 0m))
+            .ToList();
+
+        return new ReactivationInfoResponse(tenant.Name, tenant.SubscriptionPlan, tenant.IsActive, options);
+    }
+
+    public async Task<StripeRedirectResponse?> CreateReactivationCheckoutAsync(
+        string externalUserId, string plan, string returnUrl, CancellationToken cancellationToken)
+    {
+        var normalizedPlan = plan.Trim();
+        if (normalizedPlan != SubscriptionPlans.SelfService && normalizedPlan != SubscriptionPlans.DoneForYou)
+        {
+            throw new ArgumentException("Plan must be either 'Self-Service' or 'Done-For-You'.");
+        }
+
+        var tenant = await LoadTenantForAdminAsync(externalUserId, cancellationToken);
+        if (tenant is null)
+        {
+            return null;
+        }
+
+        if (tenant.IsActive || tenant.SubscriptionState != "canceled")
+        {
+            throw new InvalidOperationException("This tenant does not meet the requirements for reactivation.");
+        }
+
+        if (string.IsNullOrWhiteSpace(tenant.StripeCustomerId))
+        {
+            throw new SubscriptionNotLinkedException("This tenant is not linked to a Stripe customer.");
+        }
+
+        var row = await dbContext.TenantSubscriptions.IgnoreQueryFilters()
+            .SingleOrDefaultAsync(x => x.TenantId == tenant.Id, cancellationToken);
+        var onboardingFeeIncluded = ShouldChargeOnboardingFee(normalizedPlan, row);
+        var resolvedReturnUrl = ResolveReturnUrl(returnUrl);
+
+        var lineItems = new List<StripeApi.Checkout.SessionLineItemOptions>
+        {
+            new() { Price = GetPriceId(normalizedPlan), Quantity = 1 },
+        };
+        if (onboardingFeeIncluded)
+        {
+            lineItems.Add(new StripeApi.Checkout.SessionLineItemOptions { Price = GetOnboardingFeePriceId(), Quantity = 1 });
+        }
+
+        var session = await new StripeApi.Checkout.SessionService().CreateAsync(
+            new StripeApi.Checkout.SessionCreateOptions
+            {
+                Mode = "subscription",
+                Customer = tenant.StripeCustomerId,
+                ClientReferenceId = tenant.Id.ToString("D"),
+                SuccessUrl = AppendQuery(resolvedReturnUrl, "checkout=success"),
+                CancelUrl = AppendQuery(resolvedReturnUrl, "checkout=cancelled"),
+                LineItems = lineItems,
+                Metadata = new Dictionary<string, string>
+                {
+                    ["subscription_change"] = Reactivate,
+                    ["tenant_id"] = tenant.Id.ToString("D"),
+                    ["target_plan"] = normalizedPlan,
+                    ["onboarding_fee_included"] = onboardingFeeIncluded ? "true" : "false",
+                },
+            },
+            cancellationToken: cancellationToken);
+
+        return new StripeRedirectResponse(session.Url);
+    }
+
+    public async Task CompleteReactivationAsync(
+        Guid tenantId, string targetPlan, bool onboardingFeeIncluded, string stripeSubscriptionId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(stripeSubscriptionId))
+        {
+            throw new ArgumentException("A Stripe subscription id is required.");
+        }
+
+        var tenant = await dbContext.Tenants.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.Id == tenantId, cancellationToken)
+            ?? throw new InvalidOperationException($"Tenant {tenantId} not found.");
+
+        if (tenant.IsActive && tenant.StripeSubscriptionId == stripeSubscriptionId)
+        {
+            return;
+        }
+
+        var subscription = await new StripeApi.SubscriptionService()
+            .GetAsync(stripeSubscriptionId, cancellationToken: cancellationToken);
+
+        var row = await dbContext.TenantSubscriptions.IgnoreQueryFilters()
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
+        if (row is null)
+        {
+            row = new TenantSubscription { Id = Guid.NewGuid(), TenantId = tenantId, Plan = tenant.SubscriptionPlan };
+            dbContext.TenantSubscriptions.Add(row);
+        }
+
+        var previousPlan = tenant.SubscriptionPlan;
+        tenantSubscriptionService.ApplyStripeSubscription(row, subscription);
+        if (onboardingFeeIncluded && row.OnboardingFeePaidUtc is null)
+        {
+            row.OnboardingFeeCents = SubscriptionPlans.GetOnboardingFeeCents(row.Plan);
+            row.OnboardingFeePaidUtc = DateTime.UtcNow;
+        }
+
+        tenant.StripeSubscriptionId = subscription.Id;
+        tenant.SubscriptionPlan = row.Plan;
+        tenant.SubscriptionState = Active;
+        tenant.IsActive = true;
+
+        tenantSubscriptionService.AddSubscriptionEvent(
+            tenantId, SubscriptionEventTypes.Reactivated, previousPlan, row.Plan, row.Status, row.StripeSubscriptionId);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Tenant {TenantId} reactivated on {Plan}.", tenantId, row.Plan);
+    }
+
+    private async Task<Tenant?> LoadTenantForAdminAsync(string externalUserId, CancellationToken cancellationToken)
+    {
+        var resolution = await tenantAccessService.ResolveSingleTenantForAdminAsync(externalUserId, cancellationToken);
+        if (resolution.Status != TenantResolutionStatus.Success || resolution.Tenant is null)
+        {
+            return null;
+        }
+
+        return await dbContext.Tenants.IgnoreQueryFilters()
+            .SingleOrDefaultAsync(x => x.Id == resolution.Tenant.TenantId, cancellationToken);
     }
 
     private string ResolveReturnUrl(string returnUrl)

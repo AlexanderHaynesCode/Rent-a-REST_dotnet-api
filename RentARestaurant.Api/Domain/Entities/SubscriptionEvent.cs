@@ -25,4 +25,5 @@ public static class SubscriptionEventTypes
     public const string CancelRequested = "cancel_requested";
     public const string CancelReverted = "cancel_reverted";
     public const string Canceled = "canceled";
+    public const string Reactivated = "reactivated";
 }

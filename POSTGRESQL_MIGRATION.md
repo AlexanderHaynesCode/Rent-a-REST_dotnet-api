@@ -177,7 +177,8 @@ CREATE TABLE public.subscription_events (
 
     CONSTRAINT subscription_events_type_check CHECK (event_type IN (
         'signup', 'upgrade', 'downgrade_requested', 'downgrade_canceled',
-        'downgrade_started', 'cancel_requested', 'cancel_reverted', 'canceled')),
+        'downgrade_started', 'cancel_requested', 'cancel_reverted', 'canceled',
+        'reactivated')),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 );
 

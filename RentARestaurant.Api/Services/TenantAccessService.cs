@@ -53,13 +53,8 @@ public class TenantAccessService(AppDbContext dbContext) : ITenantAccessService
             return new TenantResolutionResult(TenantResolutionStatus.MultipleMatches, null, memberships.Count);
         }
 
-        var match = memberships[0];
-        if (!match.IsActive)
-        {
-            return new TenantResolutionResult(TenantResolutionStatus.NotFound, null);
-        }
-
-        return new TenantResolutionResult(TenantResolutionStatus.Success, match, 1);
+        // Inactive tenants are returned so callers can route a canceled owner to reactivation.
+        return new TenantResolutionResult(TenantResolutionStatus.Success, memberships[0], 1);
     }
 
     public async Task<SenderTenantResolutionResult> ResolveTenantBySenderEmailAsync(string senderEmail, CancellationToken cancellationToken)

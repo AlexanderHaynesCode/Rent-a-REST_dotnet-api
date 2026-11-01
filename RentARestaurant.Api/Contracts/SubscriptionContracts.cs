@@ -24,6 +24,22 @@ public sealed record StripeRedirectRequest(
 
 public sealed record StripeRedirectResponse(string Url);
 
+public sealed record ReactivationPlanOption(string Plan, decimal MonthlyPriceUsd, decimal OnboardingFeeUsd);
+
+public sealed record ReactivationInfoResponse(
+    string TenantName,
+    string PreviousPlan,
+    bool IsActive,
+    IReadOnlyList<ReactivationPlanOption> Plans);
+
+public sealed record ReactivationCheckoutRequest(
+    [Required]
+    [RegularExpression("^(Self-Service|Done-For-You)$", ErrorMessage = "Plan must be either 'Self-Service' or 'Done-For-You'.")]
+    string Plan,
+    [Required]
+    [MaxLength(2048)]
+    string ReturnUrl);
+
 public sealed record PreviewSubscriptionChangeResponse(
     string CurrentPlan,
     string TargetPlan,

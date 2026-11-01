@@ -56,6 +56,15 @@ public class AdminRestaurantController(
                 });
             }
 
+            if (!resolution.Tenant.IsActive)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    Error = "This tenant's subscription is not active.",
+                    Code = "subscription_inactive"
+                });
+            }
+
             tenantContext.SetTenant(resolution.Tenant.TenantId, resolution.Tenant.Slug);
 
             var restaurant = await restaurantAdminService.GetSnapshotAsync(resolution.Tenant.TenantId, cancellationToken);

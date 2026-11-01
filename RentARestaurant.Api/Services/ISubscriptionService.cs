@@ -18,6 +18,15 @@ public interface ISubscriptionService
 
     Task<StripeRedirectResponse> CreateBillingPortalSessionAsync(string returnUrl, CancellationToken cancellationToken);
 
+    /// <summary>Returns null when the user has no tenant membership.</summary>
+    Task<ReactivationInfoResponse?> GetReactivationInfoAsync(string externalUserId, CancellationToken cancellationToken);
+
+    /// <summary>Returns null when the user has no tenant membership; throws InvalidOperationException if the tenant is not canceled.</summary>
+    Task<StripeRedirectResponse?> CreateReactivationCheckoutAsync(string externalUserId, string plan, string returnUrl, CancellationToken cancellationToken);
+
+    /// <summary>Attaches the new Stripe subscription to a canceled tenant and reactivates it. Safe to call repeatedly.</summary>
+    Task CompleteReactivationAsync(Guid tenantId, string targetPlan, bool onboardingFeeIncluded, string stripeSubscriptionId, CancellationToken cancellationToken);
+
     /// <summary>Applies a paid upgrade to the Stripe subscription and the tenant. Safe to call repeatedly.</summary>
     Task CompleteUpgradeAsync(Guid tenantId, string targetPlan, bool onboardingFeeIncluded, CancellationToken cancellationToken);
 }
