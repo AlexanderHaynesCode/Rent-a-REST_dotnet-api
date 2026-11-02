@@ -504,6 +504,24 @@ public sealed class SubscriptionService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Tenant {TenantId} reactivated on {Plan}.", tenantId, row.Plan);
+
+        try
+        {
+            var ownerEmail = await dbContext.TenantUsers.IgnoreQueryFilters()
+                .Where(x => x.TenantId == tenantId)
+                .OrderBy(x => x.Role == "Owner" ? 0 : 1)
+                .Select(x => x.Email)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (!string.IsNullOrWhiteSpace(ownerEmail))
+            {
+                await emailService.SendWelcomeBackEmailAsync(
+                    ownerEmail, tenant.Name, tenant.Slug, row.Plan, cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send welcome-back email for tenant {TenantId}", tenantId);
+        }
     }
 
     private async Task<Tenant?> LoadTenantForAdminAsync(string externalUserId, CancellationToken cancellationToken)
