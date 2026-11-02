@@ -40,7 +40,8 @@ public sealed class SubscriptionService(
             row?.PendingPlanEffectiveUtc,
             row?.Status,
             row?.CancelAtPeriodEnd ?? false,
-            row?.CurrentPeriodEndUtc);
+            row?.CurrentPeriodEndUtc,
+            row?.GraceEndsUtc);
     }
 
     public async Task<SetSubscriptionCancellationResponse> SetCancellationAsync(bool cancelAtPeriodEnd, CancellationToken cancellationToken)
@@ -522,6 +523,77 @@ public sealed class SubscriptionService(
         {
             logger.LogWarning(ex, "Failed to send welcome-back email for tenant {TenantId}", tenantId);
         }
+    }
+
+    public async Task<PaymentRecoveryInfoResponse?> GetPaymentRecoveryInfoAsync(string externalUserId, CancellationToken cancellationToken)
+    {
+        var tenant = await LoadTenantForAdminAsync(externalUserId, cancellationToken);
+        if (tenant is null)
+        {
+            return null;
+        }
+
+        var row = await dbContext.TenantSubscriptions.IgnoreQueryFilters()
+            .SingleOrDefaultAsync(x => x.TenantId == tenant.Id, cancellationToken);
+
+        string? hostedInvoiceUrl = null;
+        if (!string.IsNullOrWhiteSpace(tenant.StripeCustomerId) && !string.IsNullOrWhiteSpace(tenant.StripeSubscriptionId))
+        {
+            try
+            {
+                var invoices = await new StripeApi.InvoiceService().ListAsync(
+                    new StripeApi.InvoiceListOptions
+                    {
+                        Customer = tenant.StripeCustomerId,
+                        Subscription = tenant.StripeSubscriptionId,
+                        Status = "open",
+                        Limit = 1,
+                    },
+                    cancellationToken: cancellationToken);
+                hostedInvoiceUrl = invoices.Data.FirstOrDefault()?.HostedInvoiceUrl;
+            }
+            catch (StripeApi.StripeException ex)
+            {
+                logger.LogWarning(ex, "Could not load the open invoice for tenant {TenantId}", tenant.Id);
+            }
+        }
+
+        return new PaymentRecoveryInfoResponse(
+            tenant.Name,
+            tenant.SubscriptionPlan,
+            tenant.SubscriptionState == "suspended",
+            row?.PaymentFailedUtc,
+            hostedInvoiceUrl);
+    }
+
+    public async Task<StripeRedirectResponse?> CreatePaymentRecoveryPortalAsync(
+        string externalUserId, string returnUrl, CancellationToken cancellationToken)
+    {
+        var tenant = await LoadTenantForAdminAsync(externalUserId, cancellationToken);
+        if (tenant is null)
+        {
+            return null;
+        }
+
+        if (tenant.SubscriptionState != "suspended")
+        {
+            throw new InvalidOperationException("This tenant is not suspended for a failed payment, not eligible for payment recovery.");
+        }
+
+        if (string.IsNullOrWhiteSpace(tenant.StripeCustomerId))
+        {
+            throw new SubscriptionNotLinkedException("This tenant is not linked to a Stripe customer.");
+        }
+
+        var session = await new StripeApi.BillingPortal.SessionService().CreateAsync(
+            new StripeApi.BillingPortal.SessionCreateOptions
+            {
+                Customer = tenant.StripeCustomerId,
+                ReturnUrl = ResolveReturnUrl(returnUrl),
+            },
+            cancellationToken: cancellationToken);
+
+        return new StripeRedirectResponse(session.Url);
     }
 
     private async Task<Tenant?> LoadTenantForAdminAsync(string externalUserId, CancellationToken cancellationToken)

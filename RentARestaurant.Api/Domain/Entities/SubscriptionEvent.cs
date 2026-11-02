@@ -26,4 +26,7 @@ public static class SubscriptionEventTypes
     public const string CancelReverted = "cancel_reverted";
     public const string Canceled = "canceled";
     public const string Reactivated = "reactivated";
+    public const string PaymentFailed = "payment_failed";
+    public const string Suspended = "suspended";
+    public const string PaymentRecovered = "payment_recovered";
 }

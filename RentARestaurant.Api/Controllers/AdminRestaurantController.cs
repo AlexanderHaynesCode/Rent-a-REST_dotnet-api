@@ -18,6 +18,7 @@ public class AdminRestaurantController(
     IR2StorageService r2StorageService,
     IRestaurantAdminService restaurantAdminService) : ControllerBase
 {
+    private const string Suspended = "suspended";
     private static readonly System.Text.RegularExpressions.Regex PhoneNumberPattern =
         new(@"^[0-9+\-().\s]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
@@ -58,10 +59,13 @@ public class AdminRestaurantController(
 
             if (!resolution.Tenant.IsActive)
             {
+                var suspended = resolution.Tenant.SubscriptionState == Suspended;
                 return StatusCode(StatusCodes.Status403Forbidden, new
                 {
-                    Error = "This tenant's subscription is not active.",
-                    Code = "subscription_inactive"
+                    Error = suspended
+                        ? "This tenant is suspended because of a failed payment."
+                        : "This tenant's subscription is not active.",
+                    Code = suspended ? "payment_failed" : "subscription_inactive"
                 });
             }
 

@@ -8,6 +8,14 @@ public interface IEmailService
 
     Task SendDoneForYouUpgradeEmailAsync(string toEmail, string restaurantName, CancellationToken cancellationToken);
 
+    Task SendPaymentFailedEmailAsync(string toEmail, string restaurantName, DateTime graceEndsUtc, CancellationToken cancellationToken);
+
+    Task SendPaymentGraceReminderEmailAsync(string toEmail, string restaurantName, DateTime graceEndsUtc, CancellationToken cancellationToken);
+
+    Task SendAccountSuspendedEmailAsync(string toEmail, string restaurantName, CancellationToken cancellationToken);
+
+    Task SendPaymentRecoveredEmailAsync(string toEmail, string restaurantName, string slug, CancellationToken cancellationToken);
+
     Task SendAgentChangesAppliedEmailAsync(
         string toEmail,
         string restaurantName,

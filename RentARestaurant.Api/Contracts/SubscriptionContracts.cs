@@ -11,7 +11,15 @@ public sealed record AdminSubscriptionResponse(
     DateTime? PendingPlanEffectiveUtc = null,
     string? BillingStatus = null,
     bool CancelAtPeriodEnd = false,
-    DateTime? CurrentPeriodEndUtc = null);
+    DateTime? CurrentPeriodEndUtc = null,
+    DateTime? GraceEndsUtc = null);
+
+public sealed record PaymentRecoveryInfoResponse(
+    string TenantName,
+    string Plan,
+    bool IsSuspended,
+    DateTime? PaymentFailedUtc,
+    string? HostedInvoiceUrl);
 
 public sealed record SetSubscriptionCancellationRequest(bool CancelAtPeriodEnd);
 

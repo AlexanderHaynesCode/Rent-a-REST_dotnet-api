@@ -19,6 +19,12 @@ public interface ISubscriptionService
     Task<StripeRedirectResponse> CreateBillingPortalSessionAsync(string returnUrl, CancellationToken cancellationToken);
 
     /// <summary>Returns null when the user has no tenant membership.</summary>
+    Task<PaymentRecoveryInfoResponse?> GetPaymentRecoveryInfoAsync(string externalUserId, CancellationToken cancellationToken);
+
+    /// <summary>Opens a billing portal session for a suspended tenant; null when the user has no tenant membership.</summary>
+    Task<StripeRedirectResponse?> CreatePaymentRecoveryPortalAsync(string externalUserId, string returnUrl, CancellationToken cancellationToken);
+
+    /// <summary>Returns null when the user has no tenant membership.</summary>
     Task<ReactivationInfoResponse?> GetReactivationInfoAsync(string externalUserId, CancellationToken cancellationToken);
 
     /// <summary>Returns null when the user has no tenant membership; throws InvalidOperationException if the tenant is not canceled.</summary>

@@ -245,6 +245,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.PendingPlanEffectiveUtc).HasColumnName("pending_plan_effective_utc");
             entity.Property(x => x.PreviousPlan).HasColumnName("previous_plan").HasMaxLength(50);
             entity.Property(x => x.PlanChangedUtc).HasColumnName("plan_changed_utc");
+            entity.Property(x => x.PaymentFailedUtc).HasColumnName("payment_failed_utc");
+            entity.Property(x => x.GraceEndsUtc).HasColumnName("grace_ends_utc");
+            entity.Property(x => x.GraceReminderSentUtc).HasColumnName("grace_reminder_sent_utc");
             entity.Property(x => x.CreatedUtc).HasColumnName("created_utc");
             entity.Property(x => x.UpdatedUtc).HasColumnName("updated_utc");
             entity.HasOne(x => x.Tenant)

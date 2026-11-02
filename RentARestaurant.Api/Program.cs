@@ -54,6 +54,7 @@ builder.Services.AddScoped<IAgentRollbackService, AgentRollbackService>();
 builder.Services.AddScoped<IStripeCheckoutService, StripeCheckoutService>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<ITenantSubscriptionService, TenantSubscriptionService>();
+builder.Services.AddHostedService<PaymentGraceReminderService>();
 builder.Services.AddSingleton<IR2StorageService, CloudflareR2StorageService>();
 
 Stripe.StripeConfiguration.ApiKey = builder.Configuration["Stripe:SecretKey"];

@@ -145,6 +145,9 @@ CREATE TABLE public.tenant_subscriptions (
     pending_plan_effective_utc TIMESTAMP WITH TIME ZONE,
     previous_plan VARCHAR(50),
     plan_changed_utc TIMESTAMP WITH TIME ZONE,
+    payment_failed_utc TIMESTAMP WITH TIME ZONE,
+    grace_ends_utc TIMESTAMP WITH TIME ZONE,
+    grace_reminder_sent_utc TIMESTAMP WITH TIME ZONE,
     created_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -178,7 +181,7 @@ CREATE TABLE public.subscription_events (
     CONSTRAINT subscription_events_type_check CHECK (event_type IN (
         'signup', 'upgrade', 'downgrade_requested', 'downgrade_canceled',
         'downgrade_started', 'cancel_requested', 'cancel_reverted', 'canceled',
-        'reactivated')),
+        'reactivated', 'payment_failed', 'suspended', 'payment_recovered')),
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 );
 
@@ -186,6 +189,23 @@ CREATE INDEX idx_subscription_events_tenant_occurred ON subscription_events(tena
 ```
 
 `effective_utc` is when the change takes effect (e.g. the period end for `downgrade_requested` and `cancel_requested`).
+
+**Failed-payment grace period (existing databases):** run this to add the grace columns and the new event types.
+
+```sql
+ALTER TABLE public.tenant_subscriptions
+ADD COLUMN payment_failed_utc TIMESTAMP WITH TIME ZONE,
+ADD COLUMN grace_ends_utc TIMESTAMP WITH TIME ZONE,
+ADD COLUMN grace_reminder_sent_utc TIMESTAMP WITH TIME ZONE;
+
+ALTER TABLE public.subscription_events DROP CONSTRAINT subscription_events_type_check;
+ALTER TABLE public.subscription_events ADD CONSTRAINT subscription_events_type_check CHECK (event_type IN (
+    'signup', 'upgrade', 'downgrade_requested', 'downgrade_canceled',
+    'downgrade_started', 'cancel_requested', 'cancel_reverted', 'canceled',
+    'reactivated', 'payment_failed', 'suspended', 'payment_recovered'));
+```
+
+When Stripe first marks a subscription `past_due`, the API sets `payment_failed_utc` and `grace_ends_utc` (7 days later) and never resets them while the episode lasts. Stripe's retry window (1 week, final action "unpaid") moves the subscription to `unpaid`, which suspends the tenant (`is_active = false`, `subscription_state = 'suspended'`). A later `active` status clears the episode and restores the tenant.
 
 ---
 

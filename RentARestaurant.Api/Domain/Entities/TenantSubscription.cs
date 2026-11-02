@@ -24,6 +24,9 @@ public class TenantSubscription : ITenantEntity
     public DateTime? PendingPlanEffectiveUtc { get; set; }
     public string? PreviousPlan { get; set; }
     public DateTime? PlanChangedUtc { get; set; }
+    public DateTime? PaymentFailedUtc { get; set; }
+    public DateTime? GraceEndsUtc { get; set; }
+    public DateTime? GraceReminderSentUtc { get; set; }
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 

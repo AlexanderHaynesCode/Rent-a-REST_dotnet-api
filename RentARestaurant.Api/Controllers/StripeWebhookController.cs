@@ -135,7 +135,8 @@ public class StripeWebhookController(
         }
 
         if (string.Equals(eventType, "invoice.paid", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(eventType, "invoice.payment_failed", StringComparison.OrdinalIgnoreCase))
+            || string.Equals(eventType, "invoice.payment_failed", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(eventType, "invoice.payment_action_required", StringComparison.OrdinalIgnoreCase))
         {
             var invoiceSubscriptionId = ReadInvoiceSubscriptionId(root);
             if (string.IsNullOrWhiteSpace(invoiceSubscriptionId))

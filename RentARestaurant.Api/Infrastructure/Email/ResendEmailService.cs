@@ -333,4 +333,112 @@ public class ResendEmailService(
         await resend.EmailSendAsync(message, cancellationToken);
         logger.LogInformation("Agent-clarification-needed email sent to {Email}", toEmail);
     }
+
+    public async Task SendPaymentFailedEmailAsync(string toEmail, string restaurantName, DateTime graceEndsUtc, CancellationToken cancellationToken)
+    {
+        var opts = options.Value;
+        var safeRestaurantName = System.Net.WebUtility.HtmlEncode(restaurantName);
+
+        var message = new EmailMessage
+        {
+            From = $"{opts.FromName} <{opts.FromAddress}>",
+            Subject = $"Action needed: your Rentaurants payment failed \u2014 {restaurantName}",
+            HtmlBody = $"""
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+                  <h2>We couldn't process your payment</h2>
+                  <p>The latest payment for <strong>{safeRestaurantName}</strong> didn't go through.</p>
+                  <p>We'll retry automatically, and your website stays online meanwhile. To avoid a suspension around
+                  <strong>{graceEndsUtc:MMMM d, yyyy}</strong>, please update your payment method in the
+                  <a href="{AdminUrl}">admin portal</a> under Subscription.</p>
+                  <p>For help, email <a href="mailto:help@rentaurants.com">help@rentaurants.com</a>.</p>
+                  <p>The Rentaurants Team</p>
+                </div>
+                """
+        };
+        message.To.Add(toEmail);
+
+        await resend.EmailSendAsync(message, cancellationToken);
+        logger.LogInformation("Payment-failed email sent to {Email}", toEmail);
+    }
+
+    public async Task SendPaymentGraceReminderEmailAsync(string toEmail, string restaurantName, DateTime graceEndsUtc, CancellationToken cancellationToken)
+    {
+        var opts = options.Value;
+        var safeRestaurantName = System.Net.WebUtility.HtmlEncode(restaurantName);
+
+        var message = new EmailMessage
+        {
+            From = $"{opts.FromName} <{opts.FromAddress}>",
+            Subject = $"Reminder: your Rentaurants website will be suspended soon \u2014 {restaurantName}",
+            HtmlBody = $"""
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+                  <h2>Your website will be suspended soon</h2>
+                  <p>We still haven't been able to collect payment for <strong>{safeRestaurantName}</strong>.
+                  Unless it's resolved by <strong>{graceEndsUtc:MMMM d, yyyy}</strong>, your website will go offline and your
+                  admin access will be suspended. Your data is kept safe.</p>
+                  <p>Update your payment method in the <a href="{AdminUrl}">admin portal</a> to keep everything running.</p>
+                  <p>The Rentaurants Team</p>
+                </div>
+                """
+        };
+        message.To.Add(toEmail);
+
+        await resend.EmailSendAsync(message, cancellationToken);
+        logger.LogInformation("Payment-grace reminder email sent to {Email}", toEmail);
+    }
+
+    public async Task SendAccountSuspendedEmailAsync(string toEmail, string restaurantName, CancellationToken cancellationToken)
+    {
+        var opts = options.Value;
+        var safeRestaurantName = System.Net.WebUtility.HtmlEncode(restaurantName);
+
+        var message = new EmailMessage
+        {
+            From = $"{opts.FromName} <{opts.FromAddress}>",
+            Subject = $"Your Rentaurants website has been suspended \u2014 {restaurantName}",
+            HtmlBody = $"""
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+                  <h2>Your website has been suspended</h2>
+                  <p>We couldn't collect payment for <strong>{safeRestaurantName}</strong>, so the website is offline for now.
+                  Your content and settings are safe.</p>
+                  <p>Sign in to the <a href="{AdminUrl}">admin portal</a> to pay the outstanding invoice or update your payment method.
+                  Your website comes back online as soon as payment succeeds.</p>
+                  <p>For help, email <a href="mailto:help@rentaurants.com">help@rentaurants.com</a>.</p>
+                  <p>The Rentaurants Team</p>
+                </div>
+                """
+        };
+        message.To.Add(toEmail);
+
+        await resend.EmailSendAsync(message, cancellationToken);
+        logger.LogInformation("Account-suspended email sent to {Email}", toEmail);
+    }
+
+    public async Task SendPaymentRecoveredEmailAsync(string toEmail, string restaurantName, string slug, CancellationToken cancellationToken)
+    {
+        var opts = options.Value;
+        var restaurantUrl = $"{RestaurantBaseUrl}/{slug}";
+        var safeRestaurantName = System.Net.WebUtility.HtmlEncode(restaurantName);
+
+        var message = new EmailMessage
+        {
+            From = $"{opts.FromName} <{opts.FromAddress}>",
+            Subject = $"Payment received \u2014 {restaurantName} is back online",
+            HtmlBody = $"""
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+                  <h2>Thanks, you're all set</h2>
+                  <p>We received your payment and <strong>{safeRestaurantName}</strong> is active again.</p>
+                  <ul>
+                    <li><strong>Admin Dashboard:</strong> <a href="{AdminUrl}">{AdminUrl}</a></li>
+                    <li><strong>Your Restaurant Page:</strong> <a href="{restaurantUrl}">{restaurantUrl}</a></li>
+                  </ul>
+                  <p>The Rentaurants Team</p>
+                </div>
+                """
+        };
+        message.To.Add(toEmail);
+
+        await resend.EmailSendAsync(message, cancellationToken);
+        logger.LogInformation("Payment-recovered email sent to {Email} for restaurant {Slug}", toEmail, slug);
+    }
 }
