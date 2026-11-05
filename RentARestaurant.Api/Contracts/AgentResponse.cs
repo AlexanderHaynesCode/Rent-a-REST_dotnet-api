@@ -29,7 +29,8 @@ public sealed record AgentPendingClarificationResponse(
     Guid Id,
     string? TranslatedJson,
     string? RejectionReason,
-    DateTime ReceivedUtc);
+    DateTime ReceivedUtc,
+    string? ClarificationContext);
 
 public sealed record ResolveTenantBySenderEmailResponse(
     string Status,

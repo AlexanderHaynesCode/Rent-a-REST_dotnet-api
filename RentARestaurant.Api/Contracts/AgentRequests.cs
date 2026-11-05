@@ -84,7 +84,8 @@ public sealed record UpdateAgentSubmissionStatusRequest(
     string Status,
     string? TranslatedJson,
     double? ValidatorConfidence,
-    string? RejectionReason);
+    string? RejectionReason,
+    string? ClarificationContext = null);
 
 public sealed record ResolveTenantBySenderEmailRequest(
     string SenderEmail);

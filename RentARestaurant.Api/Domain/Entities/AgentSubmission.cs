@@ -43,6 +43,12 @@ public class AgentSubmission : ITenantEntity
 
     public string? RejectionReason { get; set; }
 
+    /// <summary>
+    /// JSON written by agent-intake-service when it asks the tenant which attached image is the logo/hero:
+    /// the staged attachments plus which slots are resolved/pending, so the reply doesn't need to re-attach.
+    /// </summary>
+    public string? ClarificationContext { get; set; }
+
     public DateTime ReceivedUtc { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedUtc { get; set; }
 

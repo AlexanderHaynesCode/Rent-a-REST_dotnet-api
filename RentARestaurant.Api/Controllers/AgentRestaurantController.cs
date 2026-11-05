@@ -261,7 +261,8 @@ public class AgentRestaurantController(
 
     /// <summary>
     /// Stores an email-attached image under a unique R2 key and returns its URL without touching the profile,
-    /// so the live site only changes once the URL passes validation and is applied.
+    /// so the live site only changes once the URL passes validation and is applied. The "attachment" type stages
+    /// an image while the tenant is still being asked which attached file is their logo/hero.
     /// </summary>
     [HttpPost("images/{imageType}")]
     [RequestSizeLimit(MaxImageBytes + 1024 * 1024)]
@@ -271,9 +272,9 @@ public class AgentRestaurantController(
         CancellationToken cancellationToken)
     {
         var normalizedImageType = imageType.Trim().ToLowerInvariant();
-        if (normalizedImageType is not ("logo" or "hero"))
+        if (normalizedImageType is not ("logo" or "hero" or "attachment"))
         {
-            return BadRequest(new { Error = "imageType must be one of: logo, hero." });
+            return BadRequest(new { Error = "imageType must be one of: logo, hero, attachment." });
         }
 
         var tenantId = tenantContext.TenantId!.Value;

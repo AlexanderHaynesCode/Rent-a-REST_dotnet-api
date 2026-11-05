@@ -159,6 +159,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.TranslatedJson).HasColumnName("translated_json");
             entity.Property(x => x.ValidatorConfidence).HasColumnName("validator_confidence");
             entity.Property(x => x.RejectionReason).HasColumnName("rejection_reason").HasMaxLength(1000);
+            entity.Property(x => x.ClarificationContext).HasColumnName("clarification_context");
             entity.Property(x => x.ReceivedUtc).HasColumnName("received_utc");
             entity.Property(x => x.UpdatedUtc).HasColumnName("updated_utc");
             entity.HasOne(x => x.Tenant)

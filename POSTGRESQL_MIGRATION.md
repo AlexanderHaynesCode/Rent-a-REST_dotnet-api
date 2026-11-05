@@ -598,6 +598,7 @@ CREATE TABLE agent_submissions (
     translated_json TEXT,
     validator_confidence DOUBLE PRECISION,
     rejection_reason VARCHAR(1000),
+    clarification_context TEXT,
     received_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_utc TIMESTAMP WITH TIME ZONE,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
@@ -625,3 +626,14 @@ CREATE INDEX idx_agent_change_audits_tenant_rollback ON agent_change_audits(tena
 
 **Note on `status`:** Matches the C# `AgentSubmissionStatus` enum ordinal (0=Received, 1=Translated,
 2=Validated, 3=NeedsClarification, 4=Applied, 5=Rejected, 6=Failed).
+
+**Existing databases:** `agent_submissions.clarification_context` was added later. Run this before deploying
+the API version that maps it:
+
+```sql
+ALTER TABLE agent_submissions ADD COLUMN IF NOT EXISTS clarification_context TEXT;
+```
+
+`clarification_context` holds JSON written by agent-intake-service while a submission is `NeedsClarification`
+for a logo/hero image question: the attachments it staged in R2 (`filename`, `contentType`, `url`), the slots
+already resolved (`resolvedSlots`) and the slots still being asked about (`pendingSlots`).

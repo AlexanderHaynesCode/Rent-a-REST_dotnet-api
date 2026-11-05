@@ -96,7 +96,8 @@ public class AgentSubmissionsController(
             submission.Id,
             submission.TranslatedJson,
             submission.RejectionReason,
-            submission.ReceivedUtc));
+            submission.ReceivedUtc,
+            submission.ClarificationContext));
     }
 
     [HttpGet("{id:guid}")]
@@ -139,6 +140,7 @@ public class AgentSubmissionsController(
         submission.TranslatedJson = request.TranslatedJson ?? submission.TranslatedJson;
         submission.ValidatorConfidence = request.ValidatorConfidence ?? submission.ValidatorConfidence;
         submission.RejectionReason = request.RejectionReason ?? submission.RejectionReason;
+        submission.ClarificationContext = request.ClarificationContext ?? submission.ClarificationContext;
         submission.UpdatedUtc = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
