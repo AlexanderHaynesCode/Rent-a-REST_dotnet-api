@@ -25,7 +25,8 @@ public class AgentSubmissionsController(
     ITenantContext tenantContext,
     IEmailService emailService,
     IOptions<AgentOptions> agentOptions,
-    IMemoryCache memoryCache) : ControllerBase
+    IMemoryCache memoryCache,
+    ILogger<AgentSubmissionsController> logger) : ControllerBase
 {
     private static readonly object RateLimitNoticeLock = new();
     [HttpPost]
@@ -149,6 +150,10 @@ public class AgentSubmissionsController(
         {
             await NotifyClarificationNeededAsync(tenantId, submission.RejectionReason, cancellationToken);
         }
+        else if (status == AgentSubmissionStatus.Failed)
+        {
+            await NotifyRequestFailedAsync(tenantId, id, cancellationToken);
+        }
 
         return NoContent();
     }
@@ -207,6 +212,31 @@ public class AgentSubmissionsController(
         }
 
         await emailService.SendAgentClarificationNeededEmailAsync(ownerEmail, tenant.Name, questions, cancellationToken);
+    }
+
+    private async Task NotifyRequestFailedAsync(Guid tenantId, Guid submissionId, CancellationToken cancellationToken)
+    {
+        // The status is already saved; a failed notice must not turn the caller's PATCH into a 500.
+        try
+        {
+            var tenant = await dbContext.Tenants.AsNoTracking().SingleOrDefaultAsync(x => x.Id == tenantId, cancellationToken);
+            var ownerEmail = await dbContext.TenantUsers
+                .Where(x => x.TenantId == tenantId)
+                .OrderBy(x => x.Role == "Owner" ? 0 : 1)
+                .Select(x => x.Email)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (tenant is null || string.IsNullOrWhiteSpace(ownerEmail))
+            {
+                return;
+            }
+
+            await emailService.SendAgentRequestFailedEmailAsync(ownerEmail, tenant.Name, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to send request-failed email for submission {SubmissionId}", submissionId);
+        }
     }
 
     private static AgentSubmissionResponse ToResponse(AgentSubmission submission) => new(

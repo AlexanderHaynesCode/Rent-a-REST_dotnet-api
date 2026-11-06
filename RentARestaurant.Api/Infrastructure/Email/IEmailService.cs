@@ -50,6 +50,11 @@ public interface IEmailService
         int maxPerHour,
         CancellationToken cancellationToken);
 
+    Task SendAgentRequestFailedEmailAsync(
+        string toEmail,
+        string restaurantName,
+        CancellationToken cancellationToken);
+
     Task SendAgentClarificationNeededEmailAsync(
         string toEmail,
         string restaurantName,

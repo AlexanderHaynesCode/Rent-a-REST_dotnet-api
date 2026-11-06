@@ -302,6 +302,33 @@ public class ResendEmailService(
         logger.LogInformation("Agent-rate-limited email sent to {Email}", toEmail);
     }
 
+    public async Task SendAgentRequestFailedEmailAsync(
+        string toEmail,
+        string restaurantName,
+        CancellationToken cancellationToken)
+    {
+        var opts = options.Value;
+
+        var message = new EmailMessage
+        {
+            From = $"{opts.FromName} <{opts.FromAddress}>",
+            ReplyTo = AgentReplyTo(opts),
+            Subject = $"We hit a problem with your update — {restaurantName}",
+            HtmlBody = $"""
+                <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+                  <h2>Something went wrong</h2>
+                  <p>We hit a problem on our end while processing your latest update request for <strong>{System.Net.WebUtility.HtmlEncode(restaurantName)}</strong>, so it may not have been fully applied.</p>
+                  <p>Please check your website, then reply to this email to send the request again.</p>
+                  <p>The Rentaurants Team</p>
+                </div>
+                """
+        };
+        message.To.Add(toEmail);
+
+        await resend.EmailSendAsync(message, cancellationToken);
+        logger.LogInformation("Agent-request-failed email sent to {Email}", toEmail);
+    }
+
     public async Task SendAgentClarificationNeededEmailAsync(
         string toEmail,
         string restaurantName,
