@@ -20,6 +20,10 @@ public sealed record UpsertBusinessHourRequest(
 
 public sealed record SetHoursStyleRequest(bool UseLegacyHoursStyle);
 
+public sealed record SetBottomHoursSectionRequest(
+    bool ShowBottomHoursSection,
+    bool UseLegacyBottomHoursStyle);
+
 public sealed record UpsertDateSpecificHourRequest(
     DateOnly Date,
     TimeOnly OpenTime,

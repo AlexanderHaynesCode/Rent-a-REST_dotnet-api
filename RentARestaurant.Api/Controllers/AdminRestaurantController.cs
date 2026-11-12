@@ -182,6 +182,19 @@ public class AdminRestaurantController(
         return updated ? NoContent() : NotFound();
     }
 
+    [HttpPut("hours/bottom-section")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> SetBottomHoursSection([FromBody] SetBottomHoursSectionRequest request, CancellationToken cancellationToken)
+    {
+        var updated = await restaurantAdminService.SetBottomHoursSectionAsync(
+            tenantContext.TenantId!.Value,
+            request.ShowBottomHoursSection,
+            request.UseLegacyBottomHoursStyle,
+            cancellationToken);
+        return updated ? NoContent() : NotFound();
+    }
+
     [HttpPost("hours/date-specific")]
     [RequireTenantContext]
     [RequireAdminAccess]

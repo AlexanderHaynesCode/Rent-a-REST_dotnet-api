@@ -226,6 +226,8 @@ CREATE TABLE restaurant_profiles (
     address VARCHAR(300),
     phone_number VARCHAR(30),
     use_legacy_hours_style BOOLEAN NOT NULL DEFAULT FALSE,
+    show_bottom_hours_section BOOLEAN NOT NULL DEFAULT TRUE,
+    use_legacy_bottom_hours_style BOOLEAN NOT NULL DEFAULT FALSE,
     updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -259,6 +261,14 @@ ADD COLUMN IF NOT EXISTS phone_number VARCHAR(30);
 ```sql
 ALTER TABLE restaurant_profiles
 ADD COLUMN IF NOT EXISTS use_legacy_hours_style BOOLEAN NOT NULL DEFAULT FALSE;
+```
+
+**For existing databases, add the bottom-of-page hours section settings (the second hours section shown beneath the menu on the restaurant site; `show_bottom_hours_section` defaults to TRUE so existing sites gain the section, and `use_legacy_bottom_hours_style` false = new hours CSS, true = legacy hours CSS). Run this before deploying the API, since EF selects both columns:**
+
+```sql
+ALTER TABLE restaurant_profiles
+ADD COLUMN IF NOT EXISTS show_bottom_hours_section BOOLEAN NOT NULL DEFAULT TRUE,
+ADD COLUMN IF NOT EXISTS use_legacy_bottom_hours_style BOOLEAN NOT NULL DEFAULT FALSE;
 ```
 
 ---

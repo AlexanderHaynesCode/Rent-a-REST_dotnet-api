@@ -97,6 +97,8 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
                 hour.OpenTime.ToString("HH:mm"),
                 hour.CloseTime.ToString("HH:mm"),
                 hour.IsClosed)).ToList(),
-            UseLegacyHoursStyle: profile.UseLegacyHoursStyle));
+            UseLegacyHoursStyle: profile.UseLegacyHoursStyle,
+            ShowBottomHoursSection: profile.ShowBottomHoursSection,
+            UseLegacyBottomHoursStyle: profile.UseLegacyBottomHoursStyle));
     }
 }

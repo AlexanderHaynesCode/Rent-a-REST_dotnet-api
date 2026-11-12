@@ -16,7 +16,9 @@ public sealed record PublicRestaurantResponse(
     IReadOnlyList<PublicMenuCategoryResponse> Menu,
     IReadOnlyList<BusinessHourResponse> Hours,
     IReadOnlyList<DateSpecificHourSnapshot>? DateSpecificHours = null,
-    bool UseLegacyHoursStyle = false);
+    bool UseLegacyHoursStyle = false,
+    bool ShowBottomHoursSection = true,
+    bool UseLegacyBottomHoursStyle = false);
 
 /// <summary>Only populated by the admin/agent snapshot; the public storefront response leaves it null.</summary>
 public sealed record DateSpecificHourSnapshot(

@@ -29,6 +29,8 @@ public interface IRestaurantAdminService
 
     Task<bool> SetHoursStyleAsync(Guid tenantId, bool useLegacyHoursStyle, CancellationToken cancellationToken);
 
+    Task<bool> SetBottomHoursSectionAsync(Guid tenantId, bool showBottomHoursSection, bool useLegacyBottomHoursStyle, CancellationToken cancellationToken);
+
     Task UpsertDateSpecificHoursAsync(Guid tenantId, IReadOnlyList<UpsertDateSpecificHourRequest> request, CancellationToken cancellationToken);
 
     Task<bool> DeleteDateSpecificHourAsync(Guid tenantId, DateOnly date, CancellationToken cancellationToken);
@@ -139,7 +141,9 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 hour.CloseTime.ToString("HH:mm"),
                 hour.IsClosed)).ToList(),
                 dateSpecificHours,
-                profile.UseLegacyHoursStyle);
+                profile.UseLegacyHoursStyle,
+                profile.ShowBottomHoursSection,
+                profile.UseLegacyBottomHoursStyle);
     }
 
     public async Task<bool> UpdateBrandingAsync(Guid tenantId, UpdateBrandingRequest request, CancellationToken cancellationToken)
@@ -211,6 +215,24 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         }
 
         profile.UseLegacyHoursStyle = useLegacyHoursStyle;
+        profile.UpdatedUtc = DateTime.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> SetBottomHoursSectionAsync(Guid tenantId, bool showBottomHoursSection, bool useLegacyBottomHoursStyle, CancellationToken cancellationToken)
+    {
+        var profile = await dbContext.RestaurantProfiles
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
+
+        if (profile is null)
+        {
+            return false;
+        }
+
+        profile.ShowBottomHoursSection = showBottomHoursSection;
+        profile.UseLegacyBottomHoursStyle = useLegacyBottomHoursStyle;
         profile.UpdatedUtc = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);

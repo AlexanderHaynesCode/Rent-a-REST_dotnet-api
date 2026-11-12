@@ -81,6 +81,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.Address).HasColumnName("address").HasMaxLength(300);
             entity.Property(x => x.PhoneNumber).HasColumnName("phone_number").HasMaxLength(30);
             entity.Property(x => x.UseLegacyHoursStyle).HasColumnName("use_legacy_hours_style");
+            entity.Property(x => x.ShowBottomHoursSection).HasColumnName("show_bottom_hours_section");
+            entity.Property(x => x.UseLegacyBottomHoursStyle).HasColumnName("use_legacy_bottom_hours_style");
             entity.Property(x => x.UpdatedUtc).HasColumnName("updated_utc");
             entity.HasOne(x => x.Tenant)
                 .WithOne(x => x.Profile)
