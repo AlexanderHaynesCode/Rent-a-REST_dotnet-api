@@ -231,6 +231,10 @@ CREATE TABLE restaurant_profiles (
     show_custom_background BOOLEAN NOT NULL DEFAULT FALSE,
     custom_background_hex_color_1 VARCHAR(12),
     custom_background_hex_color_2 VARCHAR(12),
+    custom_background_position_1_x INTEGER NOT NULL DEFAULT 20,
+    custom_background_position_1_y INTEGER NOT NULL DEFAULT 10,
+    custom_background_position_2_x INTEGER NOT NULL DEFAULT 80,
+    custom_background_position_2_y INTEGER NOT NULL DEFAULT 10,
     updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -238,7 +242,12 @@ CREATE TABLE restaurant_profiles (
     CONSTRAINT hex_color_format_primary CHECK (primary_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
     CONSTRAINT hex_color_format_secondary CHECK (secondary_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
     CONSTRAINT hex_color_format_custom_background_1 CHECK (custom_background_hex_color_1 IS NULL OR custom_background_hex_color_1 ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
-    CONSTRAINT hex_color_format_custom_background_2 CHECK (custom_background_hex_color_2 IS NULL OR custom_background_hex_color_2 ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$')
+    CONSTRAINT hex_color_format_custom_background_2 CHECK (custom_background_hex_color_2 IS NULL OR custom_background_hex_color_2 ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
+    CONSTRAINT custom_background_position_range CHECK (
+        custom_background_position_1_x BETWEEN 0 AND 100 AND
+        custom_background_position_1_y BETWEEN 0 AND 100 AND
+        custom_background_position_2_x BETWEEN 0 AND 100 AND
+        custom_background_position_2_y BETWEEN 0 AND 100)
 );
 
 CREATE INDEX idx_restaurant_profiles_updated_utc ON restaurant_profiles(updated_utc);
@@ -287,6 +296,23 @@ ADD COLUMN IF NOT EXISTS custom_background_hex_color_2 VARCHAR(12);
 ALTER TABLE restaurant_profiles
 ADD CONSTRAINT hex_color_format_custom_background_1 CHECK (custom_background_hex_color_1 IS NULL OR custom_background_hex_color_1 ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
 ADD CONSTRAINT hex_color_format_custom_background_2 CHECK (custom_background_hex_color_2 IS NULL OR custom_background_hex_color_2 ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$');
+```
+
+**For existing databases, add the custom background glow positions (the `X% Y%` in each radial gradient's `circle at X% Y%`, set by the admin portal's Horizontal/Vertical sliders in steps of 10). Defaults are color 1 at 20% 10% and color 2 at 80% 10%. Run this before deploying the API, since EF selects all four columns:**
+
+```sql
+ALTER TABLE restaurant_profiles
+ADD COLUMN IF NOT EXISTS custom_background_position_1_x INTEGER NOT NULL DEFAULT 20,
+ADD COLUMN IF NOT EXISTS custom_background_position_1_y INTEGER NOT NULL DEFAULT 10,
+ADD COLUMN IF NOT EXISTS custom_background_position_2_x INTEGER NOT NULL DEFAULT 80,
+ADD COLUMN IF NOT EXISTS custom_background_position_2_y INTEGER NOT NULL DEFAULT 10;
+
+ALTER TABLE restaurant_profiles
+ADD CONSTRAINT custom_background_position_range CHECK (
+    custom_background_position_1_x BETWEEN 0 AND 100 AND
+    custom_background_position_1_y BETWEEN 0 AND 100 AND
+    custom_background_position_2_x BETWEEN 0 AND 100 AND
+    custom_background_position_2_y BETWEEN 0 AND 100);
 ```
 
 ---

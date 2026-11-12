@@ -102,6 +102,10 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             UseLegacyBottomHoursStyle: profile.UseLegacyBottomHoursStyle,
             ShowCustomBackground: profile.ShowCustomBackground,
             CustomBackgroundHexColor1: profile.CustomBackgroundHexColor1,
-            CustomBackgroundHexColor2: profile.CustomBackgroundHexColor2));
+            CustomBackgroundHexColor2: profile.CustomBackgroundHexColor2,
+            CustomBackgroundPosition1X: profile.CustomBackgroundPosition1X,
+            CustomBackgroundPosition1Y: profile.CustomBackgroundPosition1Y,
+            CustomBackgroundPosition2X: profile.CustomBackgroundPosition2X,
+            CustomBackgroundPosition2Y: profile.CustomBackgroundPosition2Y));
     }
 }

@@ -423,7 +423,11 @@ public class AgentRestaurantController(
             branding.PhoneNumber ?? profile.PhoneNumber,
             profile.ShowCustomBackground,
             profile.CustomBackgroundHexColor1,
-            profile.CustomBackgroundHexColor2);
+            profile.CustomBackgroundHexColor2,
+            profile.CustomBackgroundPosition1X,
+            profile.CustomBackgroundPosition1Y,
+            profile.CustomBackgroundPosition2X,
+            profile.CustomBackgroundPosition2Y);
 
         var updated = await restaurantAdminService.UpdateBrandingAsync(tenantId, merged, cancellationToken);
         if (updated)

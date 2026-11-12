@@ -27,6 +27,10 @@ public class AdminRestaurantController(
     private static string? NullIfBlank(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    // Background glow positions are percentages chosen from an 11-step slider (0, 10, ..., 100).
+    private static bool IsValidBackgroundPosition(int value) =>
+        value is >= 0 and <= 100 && value % 10 == 0;
+
     [HttpGet]
     [RequireTenantContext]
     [RequireAdminAccess]
@@ -160,6 +164,14 @@ public class AdminRestaurantController(
             (trimmedRequest.CustomBackgroundHexColor2 is not null && !HexColorPattern.IsMatch(trimmedRequest.CustomBackgroundHexColor2)))
         {
             return BadRequest("Custom background colors must be hex colors like #1A2B3C.");
+        }
+
+        if (!IsValidBackgroundPosition(trimmedRequest.CustomBackgroundPosition1X) ||
+            !IsValidBackgroundPosition(trimmedRequest.CustomBackgroundPosition1Y) ||
+            !IsValidBackgroundPosition(trimmedRequest.CustomBackgroundPosition2X) ||
+            !IsValidBackgroundPosition(trimmedRequest.CustomBackgroundPosition2Y))
+        {
+            return BadRequest("Custom background positions must be between 0 and 100 in steps of 10.");
         }
 
         if (trimmedRequest.Address?.Length > 300)

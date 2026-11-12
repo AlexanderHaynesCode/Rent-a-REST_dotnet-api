@@ -21,7 +21,11 @@ public sealed record PublicRestaurantResponse(
     bool UseLegacyBottomHoursStyle = false,
     bool ShowCustomBackground = false,
     string? CustomBackgroundHexColor1 = null,
-    string? CustomBackgroundHexColor2 = null);
+    string? CustomBackgroundHexColor2 = null,
+    int CustomBackgroundPosition1X = CustomBackgroundDefaults.Position1X,
+    int CustomBackgroundPosition1Y = CustomBackgroundDefaults.Position1Y,
+    int CustomBackgroundPosition2X = CustomBackgroundDefaults.Position2X,
+    int CustomBackgroundPosition2Y = CustomBackgroundDefaults.Position2Y);
 
 /// <summary>Only populated by the admin/agent snapshot; the public storefront response leaves it null.</summary>
 public sealed record DateSpecificHourSnapshot(

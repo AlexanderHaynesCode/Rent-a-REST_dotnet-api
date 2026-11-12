@@ -13,7 +13,20 @@ public sealed record UpdateBrandingRequest(
     string? PhoneNumber = null,
     bool ShowCustomBackground = false,
     string? CustomBackgroundHexColor1 = null,
-    string? CustomBackgroundHexColor2 = null);
+    string? CustomBackgroundHexColor2 = null,
+    int CustomBackgroundPosition1X = CustomBackgroundDefaults.Position1X,
+    int CustomBackgroundPosition1Y = CustomBackgroundDefaults.Position1Y,
+    int CustomBackgroundPosition2X = CustomBackgroundDefaults.Position2X,
+    int CustomBackgroundPosition2Y = CustomBackgroundDefaults.Position2Y);
+
+/// <summary>Default percentage positions of the two custom background glow circles ("circle at X% Y%").</summary>
+public static class CustomBackgroundDefaults
+{
+    public const int Position1X = 20;
+    public const int Position1Y = 10;
+    public const int Position2X = 80;
+    public const int Position2Y = 10;
+}
 
 public sealed record UpsertBusinessHourRequest(
     DayOfWeek DayOfWeek,

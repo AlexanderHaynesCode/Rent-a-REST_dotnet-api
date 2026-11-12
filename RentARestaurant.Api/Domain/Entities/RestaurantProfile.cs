@@ -22,6 +22,10 @@ public class RestaurantProfile : ITenantEntity
     public bool ShowCustomBackground { get; set; }
     public string? CustomBackgroundHexColor1 { get; set; }
     public string? CustomBackgroundHexColor2 { get; set; }
+    public int CustomBackgroundPosition1X { get; set; } = Contracts.CustomBackgroundDefaults.Position1X;
+    public int CustomBackgroundPosition1Y { get; set; } = Contracts.CustomBackgroundDefaults.Position1Y;
+    public int CustomBackgroundPosition2X { get; set; } = Contracts.CustomBackgroundDefaults.Position2X;
+    public int CustomBackgroundPosition2Y { get; set; } = Contracts.CustomBackgroundDefaults.Position2Y;
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 
     public Tenant Tenant { get; set; } = null!;
