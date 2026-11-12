@@ -173,6 +173,15 @@ public class AdminRestaurantController(
         return NoContent();
     }
 
+    [HttpPut("hours/style")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> SetHoursStyle([FromBody] SetHoursStyleRequest request, CancellationToken cancellationToken)
+    {
+        var updated = await restaurantAdminService.SetHoursStyleAsync(tenantContext.TenantId!.Value, request.UseLegacyHoursStyle, cancellationToken);
+        return updated ? NoContent() : NotFound();
+    }
+
     [HttpPost("hours/date-specific")]
     [RequireTenantContext]
     [RequireAdminAccess]

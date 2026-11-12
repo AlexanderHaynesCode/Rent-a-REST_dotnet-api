@@ -27,6 +27,8 @@ public interface IRestaurantAdminService
 
     Task UpsertHoursAsync(Guid tenantId, IReadOnlyList<UpsertBusinessHourRequest> request, CancellationToken cancellationToken);
 
+    Task<bool> SetHoursStyleAsync(Guid tenantId, bool useLegacyHoursStyle, CancellationToken cancellationToken);
+
     Task UpsertDateSpecificHoursAsync(Guid tenantId, IReadOnlyList<UpsertDateSpecificHourRequest> request, CancellationToken cancellationToken);
 
     Task<bool> DeleteDateSpecificHourAsync(Guid tenantId, DateOnly date, CancellationToken cancellationToken);
@@ -136,7 +138,8 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 hour.OpenTime.ToString("HH:mm"),
                 hour.CloseTime.ToString("HH:mm"),
                 hour.IsClosed)).ToList(),
-                dateSpecificHours);
+                dateSpecificHours,
+                profile.UseLegacyHoursStyle);
     }
 
     public async Task<bool> UpdateBrandingAsync(Guid tenantId, UpdateBrandingRequest request, CancellationToken cancellationToken)
@@ -195,6 +198,23 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> SetHoursStyleAsync(Guid tenantId, bool useLegacyHoursStyle, CancellationToken cancellationToken)
+    {
+        var profile = await dbContext.RestaurantProfiles
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
+
+        if (profile is null)
+        {
+            return false;
+        }
+
+        profile.UseLegacyHoursStyle = useLegacyHoursStyle;
+        profile.UpdatedUtc = DateTime.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task UpsertDateSpecificHoursAsync(Guid tenantId, IReadOnlyList<UpsertDateSpecificHourRequest> request, CancellationToken cancellationToken)

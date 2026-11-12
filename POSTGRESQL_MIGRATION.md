@@ -225,6 +225,7 @@ CREATE TABLE restaurant_profiles (
     primary_cta_url TEXT,
     address VARCHAR(300),
     phone_number VARCHAR(30),
+    use_legacy_hours_style BOOLEAN NOT NULL DEFAULT FALSE,
     updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -251,6 +252,13 @@ ADD COLUMN announcement TEXT NOT NULL DEFAULT '';
 ALTER TABLE restaurant_profiles
 ADD COLUMN IF NOT EXISTS address VARCHAR(300),
 ADD COLUMN IF NOT EXISTS phone_number VARCHAR(30);
+```
+
+**For existing databases, add the hours display style toggle (false = new hours CSS, true = legacy hours CSS):**
+
+```sql
+ALTER TABLE restaurant_profiles
+ADD COLUMN IF NOT EXISTS use_legacy_hours_style BOOLEAN NOT NULL DEFAULT FALSE;
 ```
 
 ---

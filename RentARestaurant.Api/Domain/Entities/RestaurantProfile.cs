@@ -16,6 +16,7 @@ public class RestaurantProfile : ITenantEntity
     public string? PrimaryCtaUrl { get; set; }
     public string? Address { get; set; }
     public string? PhoneNumber { get; set; }
+    public bool UseLegacyHoursStyle { get; set; }
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 
     public Tenant Tenant { get; set; } = null!;

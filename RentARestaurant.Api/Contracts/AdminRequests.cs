@@ -18,6 +18,8 @@ public sealed record UpsertBusinessHourRequest(
     TimeOnly CloseTime,
     bool IsClosed);
 
+public sealed record SetHoursStyleRequest(bool UseLegacyHoursStyle);
+
 public sealed record UpsertDateSpecificHourRequest(
     DateOnly Date,
     TimeOnly OpenTime,
