@@ -228,12 +228,17 @@ CREATE TABLE restaurant_profiles (
     use_legacy_hours_style BOOLEAN NOT NULL DEFAULT FALSE,
     show_bottom_hours_section BOOLEAN NOT NULL DEFAULT TRUE,
     use_legacy_bottom_hours_style BOOLEAN NOT NULL DEFAULT FALSE,
+    show_custom_background BOOLEAN NOT NULL DEFAULT FALSE,
+    custom_background_hex_color_1 VARCHAR(12),
+    custom_background_hex_color_2 VARCHAR(12),
     updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     CONSTRAINT display_name_not_empty CHECK (display_name != ''),
     CONSTRAINT hex_color_format_primary CHECK (primary_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
-    CONSTRAINT hex_color_format_secondary CHECK (secondary_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$')
+    CONSTRAINT hex_color_format_secondary CHECK (secondary_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
+    CONSTRAINT hex_color_format_custom_background_1 CHECK (custom_background_hex_color_1 IS NULL OR custom_background_hex_color_1 ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
+    CONSTRAINT hex_color_format_custom_background_2 CHECK (custom_background_hex_color_2 IS NULL OR custom_background_hex_color_2 ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$')
 );
 
 CREATE INDEX idx_restaurant_profiles_updated_utc ON restaurant_profiles(updated_utc);
@@ -269,6 +274,19 @@ ADD COLUMN IF NOT EXISTS use_legacy_hours_style BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE restaurant_profiles
 ADD COLUMN IF NOT EXISTS show_bottom_hours_section BOOLEAN NOT NULL DEFAULT TRUE,
 ADD COLUMN IF NOT EXISTS use_legacy_bottom_hours_style BOOLEAN NOT NULL DEFAULT FALSE;
+```
+
+**For existing databases, add the custom background settings (two radial-gradient glow colors drawn over the restaurant site's default background; `show_custom_background` defaults to FALSE so existing sites keep the default background, and the colors stay stored while the toggle is off). Run this before deploying the API, since EF selects all three columns:**
+
+```sql
+ALTER TABLE restaurant_profiles
+ADD COLUMN IF NOT EXISTS show_custom_background BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS custom_background_hex_color_1 VARCHAR(12),
+ADD COLUMN IF NOT EXISTS custom_background_hex_color_2 VARCHAR(12);
+
+ALTER TABLE restaurant_profiles
+ADD CONSTRAINT hex_color_format_custom_background_1 CHECK (custom_background_hex_color_1 IS NULL OR custom_background_hex_color_1 ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
+ADD CONSTRAINT hex_color_format_custom_background_2 CHECK (custom_background_hex_color_2 IS NULL OR custom_background_hex_color_2 ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$');
 ```
 
 ---

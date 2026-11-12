@@ -99,6 +99,9 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
                 hour.IsClosed)).ToList(),
             UseLegacyHoursStyle: profile.UseLegacyHoursStyle,
             ShowBottomHoursSection: profile.ShowBottomHoursSection,
-            UseLegacyBottomHoursStyle: profile.UseLegacyBottomHoursStyle));
+            UseLegacyBottomHoursStyle: profile.UseLegacyBottomHoursStyle,
+            ShowCustomBackground: profile.ShowCustomBackground,
+            CustomBackgroundHexColor1: profile.CustomBackgroundHexColor1,
+            CustomBackgroundHexColor2: profile.CustomBackgroundHexColor2));
     }
 }

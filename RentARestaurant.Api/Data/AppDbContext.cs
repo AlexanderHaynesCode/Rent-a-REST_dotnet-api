@@ -83,6 +83,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.UseLegacyHoursStyle).HasColumnName("use_legacy_hours_style");
             entity.Property(x => x.ShowBottomHoursSection).HasColumnName("show_bottom_hours_section");
             entity.Property(x => x.UseLegacyBottomHoursStyle).HasColumnName("use_legacy_bottom_hours_style");
+            entity.Property(x => x.ShowCustomBackground).HasColumnName("show_custom_background");
+            entity.Property(x => x.CustomBackgroundHexColor1).HasColumnName("custom_background_hex_color_1").HasMaxLength(12);
+            entity.Property(x => x.CustomBackgroundHexColor2).HasColumnName("custom_background_hex_color_2").HasMaxLength(12);
             entity.Property(x => x.UpdatedUtc).HasColumnName("updated_utc");
             entity.HasOne(x => x.Tenant)
                 .WithOne(x => x.Profile)

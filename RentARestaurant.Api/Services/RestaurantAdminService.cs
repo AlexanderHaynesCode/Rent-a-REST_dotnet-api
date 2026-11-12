@@ -143,7 +143,10 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 dateSpecificHours,
                 profile.UseLegacyHoursStyle,
                 profile.ShowBottomHoursSection,
-                profile.UseLegacyBottomHoursStyle);
+                profile.UseLegacyBottomHoursStyle,
+                profile.ShowCustomBackground,
+                profile.CustomBackgroundHexColor1,
+                profile.CustomBackgroundHexColor2);
     }
 
     public async Task<bool> UpdateBrandingAsync(Guid tenantId, UpdateBrandingRequest request, CancellationToken cancellationToken)
@@ -166,6 +169,9 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         profile.PrimaryCtaUrl = request.PrimaryCtaUrl;
         profile.Address = request.Address;
         profile.PhoneNumber = request.PhoneNumber;
+        profile.ShowCustomBackground = request.ShowCustomBackground;
+        profile.CustomBackgroundHexColor1 = request.CustomBackgroundHexColor1;
+        profile.CustomBackgroundHexColor2 = request.CustomBackgroundHexColor2;
         profile.UpdatedUtc = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);

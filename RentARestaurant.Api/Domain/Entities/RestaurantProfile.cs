@@ -19,6 +19,9 @@ public class RestaurantProfile : ITenantEntity
     public bool UseLegacyHoursStyle { get; set; }
     public bool ShowBottomHoursSection { get; set; } = true;
     public bool UseLegacyBottomHoursStyle { get; set; }
+    public bool ShowCustomBackground { get; set; }
+    public string? CustomBackgroundHexColor1 { get; set; }
+    public string? CustomBackgroundHexColor2 { get; set; }
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 
     public Tenant Tenant { get; set; } = null!;

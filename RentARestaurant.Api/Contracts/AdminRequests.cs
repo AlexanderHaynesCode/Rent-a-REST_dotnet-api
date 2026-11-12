@@ -10,7 +10,10 @@ public sealed record UpdateBrandingRequest(
     string? HeroImageUrl,
     string? PrimaryCtaUrl,
     string? Address = null,
-    string? PhoneNumber = null);
+    string? PhoneNumber = null,
+    bool ShowCustomBackground = false,
+    string? CustomBackgroundHexColor1 = null,
+    string? CustomBackgroundHexColor2 = null);
 
 public sealed record UpsertBusinessHourRequest(
     DayOfWeek DayOfWeek,

@@ -18,7 +18,10 @@ public sealed record PublicRestaurantResponse(
     IReadOnlyList<DateSpecificHourSnapshot>? DateSpecificHours = null,
     bool UseLegacyHoursStyle = false,
     bool ShowBottomHoursSection = true,
-    bool UseLegacyBottomHoursStyle = false);
+    bool UseLegacyBottomHoursStyle = false,
+    bool ShowCustomBackground = false,
+    string? CustomBackgroundHexColor1 = null,
+    string? CustomBackgroundHexColor2 = null);
 
 /// <summary>Only populated by the admin/agent snapshot; the public storefront response leaves it null.</summary>
 public sealed record DateSpecificHourSnapshot(

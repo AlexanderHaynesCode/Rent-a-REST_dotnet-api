@@ -21,6 +21,8 @@ public class AdminRestaurantController(
     private const string Suspended = "suspended";
     private static readonly System.Text.RegularExpressions.Regex PhoneNumberPattern =
         new(@"^[0-9+\-().\s]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex HexColorPattern =
+        new(@"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private static string? NullIfBlank(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -141,8 +143,24 @@ public class AdminRestaurantController(
             HeroImageUrl = request.HeroImageUrl?.Trim(),
             PrimaryCtaUrl = request.PrimaryCtaUrl?.Trim(),
             Address = NullIfBlank(request.Address),
-            PhoneNumber = NullIfBlank(request.PhoneNumber)
+            PhoneNumber = NullIfBlank(request.PhoneNumber),
+            CustomBackgroundHexColor1 = NullIfBlank(request.CustomBackgroundHexColor1),
+            CustomBackgroundHexColor2 = NullIfBlank(request.CustomBackgroundHexColor2)
         };
+
+        // Colors are kept while the toggle is off so re-enabling restores them, but they're
+        // only required once the custom background is actually shown.
+        if (trimmedRequest.ShowCustomBackground &&
+            (trimmedRequest.CustomBackgroundHexColor1 is null || trimmedRequest.CustomBackgroundHexColor2 is null))
+        {
+            return BadRequest("Both custom background colors are required when the custom background is enabled.");
+        }
+
+        if ((trimmedRequest.CustomBackgroundHexColor1 is not null && !HexColorPattern.IsMatch(trimmedRequest.CustomBackgroundHexColor1)) ||
+            (trimmedRequest.CustomBackgroundHexColor2 is not null && !HexColorPattern.IsMatch(trimmedRequest.CustomBackgroundHexColor2)))
+        {
+            return BadRequest("Custom background colors must be hex colors like #1A2B3C.");
+        }
 
         if (trimmedRequest.Address?.Length > 300)
         {
