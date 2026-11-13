@@ -106,6 +106,12 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             CustomBackgroundPosition1X: profile.CustomBackgroundPosition1X,
             CustomBackgroundPosition1Y: profile.CustomBackgroundPosition1Y,
             CustomBackgroundPosition2X: profile.CustomBackgroundPosition2X,
-            CustomBackgroundPosition2Y: profile.CustomBackgroundPosition2Y));
+            CustomBackgroundPosition2Y: profile.CustomBackgroundPosition2Y,
+            CustomBackgroundMainHexColor: profile.CustomBackgroundMainHexColor,
+            CustomBackgroundMainColorActive: profile.CustomBackgroundMainColorActive,
+            CustomBackgroundSplash1Active: profile.CustomBackgroundSplash1Active,
+            CustomBackgroundSplash2Active: profile.CustomBackgroundSplash2Active,
+            CustomBackgroundImageUrl: profile.CustomBackgroundImageUrl,
+            CustomBackgroundImageActive: profile.CustomBackgroundImageActive));
     }
 }

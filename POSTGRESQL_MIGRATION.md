@@ -235,6 +235,12 @@ CREATE TABLE restaurant_profiles (
     custom_background_position_1_y INTEGER NOT NULL DEFAULT 10,
     custom_background_position_2_x INTEGER NOT NULL DEFAULT 80,
     custom_background_position_2_y INTEGER NOT NULL DEFAULT 10,
+    custom_background_main_hex_color VARCHAR(12),
+    custom_background_main_color_active BOOLEAN NOT NULL DEFAULT TRUE,
+    custom_background_splash_1_active BOOLEAN NOT NULL DEFAULT TRUE,
+    custom_background_splash_2_active BOOLEAN NOT NULL DEFAULT TRUE,
+    custom_background_image_url TEXT,
+    custom_background_image_active BOOLEAN NOT NULL DEFAULT TRUE,
     updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -247,7 +253,8 @@ CREATE TABLE restaurant_profiles (
         custom_background_position_1_x BETWEEN 0 AND 100 AND
         custom_background_position_1_y BETWEEN 0 AND 100 AND
         custom_background_position_2_x BETWEEN 0 AND 100 AND
-        custom_background_position_2_y BETWEEN 0 AND 100)
+        custom_background_position_2_y BETWEEN 0 AND 100),
+    CONSTRAINT hex_color_format_custom_background_main CHECK (custom_background_main_hex_color IS NULL OR custom_background_main_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$')
 );
 
 CREATE INDEX idx_restaurant_profiles_updated_utc ON restaurant_profiles(updated_utc);
@@ -313,6 +320,21 @@ ADD CONSTRAINT custom_background_position_range CHECK (
     custom_background_position_1_y BETWEEN 0 AND 100 AND
     custom_background_position_2_x BETWEEN 0 AND 100 AND
     custom_background_position_2_y BETWEEN 0 AND 100);
+```
+
+**For existing databases, add the custom background layers (all only apply while `show_custom_background` is TRUE). Bottom to top on the restaurant site: the main background color, then the page background image (with a light readability overlay), then the two splash colors; the hero image sits above all of them. `custom_background_main_hex_color` NULL means the site's default near-white page color. The image URL is only set by the admin `images/custom-background` upload/delete endpoints, never by the branding PUT. Every `_active` flag defaults to TRUE, so existing sites with the custom background on look the same. Run this before deploying the API, since EF selects all six columns:**
+
+```sql
+ALTER TABLE restaurant_profiles
+ADD COLUMN IF NOT EXISTS custom_background_main_hex_color VARCHAR(12),
+ADD COLUMN IF NOT EXISTS custom_background_main_color_active BOOLEAN NOT NULL DEFAULT TRUE,
+ADD COLUMN IF NOT EXISTS custom_background_splash_1_active BOOLEAN NOT NULL DEFAULT TRUE,
+ADD COLUMN IF NOT EXISTS custom_background_splash_2_active BOOLEAN NOT NULL DEFAULT TRUE,
+ADD COLUMN IF NOT EXISTS custom_background_image_url TEXT,
+ADD COLUMN IF NOT EXISTS custom_background_image_active BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE restaurant_profiles
+ADD CONSTRAINT hex_color_format_custom_background_main CHECK (custom_background_main_hex_color IS NULL OR custom_background_main_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$');
 ```
 
 ---

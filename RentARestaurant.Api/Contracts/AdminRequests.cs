@@ -17,7 +17,13 @@ public sealed record UpdateBrandingRequest(
     int CustomBackgroundPosition1X = CustomBackgroundDefaults.Position1X,
     int CustomBackgroundPosition1Y = CustomBackgroundDefaults.Position1Y,
     int CustomBackgroundPosition2X = CustomBackgroundDefaults.Position2X,
-    int CustomBackgroundPosition2Y = CustomBackgroundDefaults.Position2Y);
+    int CustomBackgroundPosition2Y = CustomBackgroundDefaults.Position2Y,
+    string? CustomBackgroundMainHexColor = null,
+    bool CustomBackgroundMainColorActive = true,
+    bool CustomBackgroundSplash1Active = true,
+    bool CustomBackgroundSplash2Active = true,
+    // The page background image URL itself is managed only by the images/custom-background endpoints.
+    bool CustomBackgroundImageActive = true);
 
 /// <summary>Default percentage positions of the two custom background glow circles ("circle at X% Y%").</summary>
 public static class CustomBackgroundDefaults

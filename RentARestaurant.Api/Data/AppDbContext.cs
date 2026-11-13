@@ -90,6 +90,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.CustomBackgroundPosition1Y).HasColumnName("custom_background_position_1_y");
             entity.Property(x => x.CustomBackgroundPosition2X).HasColumnName("custom_background_position_2_x");
             entity.Property(x => x.CustomBackgroundPosition2Y).HasColumnName("custom_background_position_2_y");
+            entity.Property(x => x.CustomBackgroundMainHexColor).HasColumnName("custom_background_main_hex_color").HasMaxLength(12);
+            entity.Property(x => x.CustomBackgroundMainColorActive).HasColumnName("custom_background_main_color_active");
+            entity.Property(x => x.CustomBackgroundSplash1Active).HasColumnName("custom_background_splash_1_active");
+            entity.Property(x => x.CustomBackgroundSplash2Active).HasColumnName("custom_background_splash_2_active");
+            entity.Property(x => x.CustomBackgroundImageUrl).HasColumnName("custom_background_image_url");
+            entity.Property(x => x.CustomBackgroundImageActive).HasColumnName("custom_background_image_active");
             entity.Property(x => x.UpdatedUtc).HasColumnName("updated_utc");
             entity.HasOne(x => x.Tenant)
                 .WithOne(x => x.Profile)

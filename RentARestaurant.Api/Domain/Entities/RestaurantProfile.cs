@@ -26,6 +26,13 @@ public class RestaurantProfile : ITenantEntity
     public int CustomBackgroundPosition1Y { get; set; } = Contracts.CustomBackgroundDefaults.Position1Y;
     public int CustomBackgroundPosition2X { get; set; } = Contracts.CustomBackgroundDefaults.Position2X;
     public int CustomBackgroundPosition2Y { get; set; } = Contracts.CustomBackgroundDefaults.Position2Y;
+    public string? CustomBackgroundMainHexColor { get; set; }
+    public bool CustomBackgroundMainColorActive { get; set; } = true;
+    public bool CustomBackgroundSplash1Active { get; set; } = true;
+    public bool CustomBackgroundSplash2Active { get; set; } = true;
+    /// <summary>Page background image shown below the hero. Only set by the custom-background image endpoints.</summary>
+    public string? CustomBackgroundImageUrl { get; set; }
+    public bool CustomBackgroundImageActive { get; set; } = true;
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 
     public Tenant Tenant { get; set; } = null!;

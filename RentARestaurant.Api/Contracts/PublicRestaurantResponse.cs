@@ -25,7 +25,13 @@ public sealed record PublicRestaurantResponse(
     int CustomBackgroundPosition1X = CustomBackgroundDefaults.Position1X,
     int CustomBackgroundPosition1Y = CustomBackgroundDefaults.Position1Y,
     int CustomBackgroundPosition2X = CustomBackgroundDefaults.Position2X,
-    int CustomBackgroundPosition2Y = CustomBackgroundDefaults.Position2Y);
+    int CustomBackgroundPosition2Y = CustomBackgroundDefaults.Position2Y,
+    string? CustomBackgroundMainHexColor = null,
+    bool CustomBackgroundMainColorActive = true,
+    bool CustomBackgroundSplash1Active = true,
+    bool CustomBackgroundSplash2Active = true,
+    string? CustomBackgroundImageUrl = null,
+    bool CustomBackgroundImageActive = true);
 
 /// <summary>Only populated by the admin/agent snapshot; the public storefront response leaves it null.</summary>
 public sealed record DateSpecificHourSnapshot(

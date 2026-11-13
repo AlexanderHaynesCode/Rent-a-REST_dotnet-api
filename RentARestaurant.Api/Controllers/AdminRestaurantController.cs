@@ -149,19 +149,23 @@ public class AdminRestaurantController(
             Address = NullIfBlank(request.Address),
             PhoneNumber = NullIfBlank(request.PhoneNumber),
             CustomBackgroundHexColor1 = NullIfBlank(request.CustomBackgroundHexColor1),
-            CustomBackgroundHexColor2 = NullIfBlank(request.CustomBackgroundHexColor2)
+            CustomBackgroundHexColor2 = NullIfBlank(request.CustomBackgroundHexColor2),
+            CustomBackgroundMainHexColor = NullIfBlank(request.CustomBackgroundMainHexColor)
         };
 
-        // Colors are kept while the toggle is off so re-enabling restores them, but they're
-        // only required once the custom background is actually shown.
+        // Splash colors are kept while their toggles are off so re-enabling restores them, but each
+        // is only required once the custom background is shown with that splash active.
         if (trimmedRequest.ShowCustomBackground &&
-            (trimmedRequest.CustomBackgroundHexColor1 is null || trimmedRequest.CustomBackgroundHexColor2 is null))
+            ((trimmedRequest.CustomBackgroundSplash1Active && trimmedRequest.CustomBackgroundHexColor1 is null) ||
+             (trimmedRequest.CustomBackgroundSplash2Active && trimmedRequest.CustomBackgroundHexColor2 is null)))
         {
-            return BadRequest("Both custom background colors are required when the custom background is enabled.");
+            return BadRequest("Each active background splash color needs a color when the custom background is enabled.");
         }
 
+        // The main background color is optional: null means the site's default page color.
         if ((trimmedRequest.CustomBackgroundHexColor1 is not null && !HexColorPattern.IsMatch(trimmedRequest.CustomBackgroundHexColor1)) ||
-            (trimmedRequest.CustomBackgroundHexColor2 is not null && !HexColorPattern.IsMatch(trimmedRequest.CustomBackgroundHexColor2)))
+            (trimmedRequest.CustomBackgroundHexColor2 is not null && !HexColorPattern.IsMatch(trimmedRequest.CustomBackgroundHexColor2)) ||
+            (trimmedRequest.CustomBackgroundMainHexColor is not null && !HexColorPattern.IsMatch(trimmedRequest.CustomBackgroundMainHexColor)))
         {
             return BadRequest("Custom background colors must be hex colors like #1A2B3C.");
         }
@@ -265,7 +269,7 @@ public class AdminRestaurantController(
         var normalizedImageType = imageType.Trim();
         if (!IsSupportedBrandingImageType(normalizedImageType))
         {
-            return BadRequest(new { Error = "imageType must be one of: logo, hero, primary-cta." });
+            return BadRequest(new { Error = "imageType must be one of: logo, hero, primary-cta, custom-background." });
         }
 
         if (file is null || file.Length == 0)
@@ -328,7 +332,7 @@ public class AdminRestaurantController(
         var normalizedImageType = imageType.Trim();
         if (!IsSupportedBrandingImageType(normalizedImageType))
         {
-            return BadRequest(new { Error = "imageType must be one of: logo, hero, primary-cta." });
+            return BadRequest(new { Error = "imageType must be one of: logo, hero, primary-cta, custom-background." });
         }
 
         var profile = await dbContext.RestaurantProfiles
@@ -553,7 +557,8 @@ public class AdminRestaurantController(
     private static bool IsSupportedBrandingImageType(string imageType) =>
         imageType.Equals("logo", StringComparison.OrdinalIgnoreCase) ||
         imageType.Equals("hero", StringComparison.OrdinalIgnoreCase) ||
-        imageType.Equals("primary-cta", StringComparison.OrdinalIgnoreCase);
+        imageType.Equals("primary-cta", StringComparison.OrdinalIgnoreCase) ||
+        imageType.Equals("custom-background", StringComparison.OrdinalIgnoreCase);
 
     private static void SetBrandingImageUrl(RestaurantProfile profile, string imageType, string? url)
     {
@@ -567,6 +572,9 @@ public class AdminRestaurantController(
                 break;
             case "primary-cta":
                 profile.PrimaryCtaUrl = url;
+                break;
+            case "custom-background":
+                profile.CustomBackgroundImageUrl = url;
                 break;
         }
     }
