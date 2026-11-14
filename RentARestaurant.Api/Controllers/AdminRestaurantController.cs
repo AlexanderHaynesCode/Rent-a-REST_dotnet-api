@@ -207,12 +207,22 @@ public class AdminRestaurantController(
         return NoContent();
     }
 
-    [HttpPut("hours/style")]
+    [HttpPut("hours/top-section")]
     [RequireTenantContext]
     [RequireAdminAccess]
-    public async Task<IActionResult> SetHoursStyle([FromBody] SetHoursStyleRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> SetTopHoursSection([FromBody] SetTopHoursSectionRequest request, CancellationToken cancellationToken)
     {
-        var updated = await restaurantAdminService.SetHoursStyleAsync(tenantContext.TenantId!.Value, request.UseLegacyHoursStyle, cancellationToken);
+        if (request.TopHoursStyle is null || !TopHoursOptions.Styles.Contains(request.TopHoursStyle))
+        {
+            return BadRequest(new { message = $"TopHoursStyle must be one of: {string.Join(", ", TopHoursOptions.Styles)}." });
+        }
+
+        if (request.TopHoursOpenStatusDetail is null || !TopHoursOptions.OpenStatusDetails.Contains(request.TopHoursOpenStatusDetail))
+        {
+            return BadRequest(new { message = $"TopHoursOpenStatusDetail must be one of: {string.Join(", ", TopHoursOptions.OpenStatusDetails)}." });
+        }
+
+        var updated = await restaurantAdminService.SetTopHoursSectionAsync(tenantContext.TenantId!.Value, request, cancellationToken);
         return updated ? NoContent() : NotFound();
     }
 

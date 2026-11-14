@@ -226,6 +226,9 @@ CREATE TABLE restaurant_profiles (
     address VARCHAR(300),
     phone_number VARCHAR(30),
     use_legacy_hours_style BOOLEAN NOT NULL DEFAULT FALSE,
+    show_top_hours_section BOOLEAN NOT NULL DEFAULT TRUE,
+    top_hours_style VARCHAR(20) NOT NULL DEFAULT 'standard',
+    top_hours_open_status_detail VARCHAR(30) NOT NULL DEFAULT 'none',
     show_bottom_hours_section BOOLEAN NOT NULL DEFAULT TRUE,
     use_legacy_bottom_hours_style BOOLEAN NOT NULL DEFAULT FALSE,
     show_custom_background BOOLEAN NOT NULL DEFAULT FALSE,
@@ -254,7 +257,9 @@ CREATE TABLE restaurant_profiles (
         custom_background_position_1_y BETWEEN 0 AND 100 AND
         custom_background_position_2_x BETWEEN 0 AND 100 AND
         custom_background_position_2_y BETWEEN 0 AND 100),
-    CONSTRAINT hex_color_format_custom_background_main CHECK (custom_background_main_hex_color IS NULL OR custom_background_main_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$')
+    CONSTRAINT hex_color_format_custom_background_main CHECK (custom_background_main_hex_color IS NULL OR custom_background_main_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
+    CONSTRAINT top_hours_style_values CHECK (top_hours_style IN ('standard', 'open-status')),
+    CONSTRAINT top_hours_open_status_detail_values CHECK (top_hours_open_status_detail IN ('none', 'today', 'today-and-tomorrow'))
 );
 
 CREATE INDEX idx_restaurant_profiles_updated_utc ON restaurant_profiles(updated_utc);
@@ -290,6 +295,19 @@ ADD COLUMN IF NOT EXISTS use_legacy_hours_style BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE restaurant_profiles
 ADD COLUMN IF NOT EXISTS show_bottom_hours_section BOOLEAN NOT NULL DEFAULT TRUE,
 ADD COLUMN IF NOT EXISTS use_legacy_bottom_hours_style BOOLEAN NOT NULL DEFAULT FALSE;
+```
+
+**For existing databases, add the top-of-page hours section settings (the hours section shown above the menu on the restaurant site). `show_top_hours_section` defaults to TRUE and `top_hours_style` defaults to `'standard'` (the full weekly hours list, styled by the existing `use_legacy_hours_style`), so existing sites look unchanged. `'open-status'` replaces the list with an "Open Now!"/"Closed" message, and `top_hours_open_status_detail` controls the lines beneath it: `'none'`, `'today'` (today's hours) or `'today-and-tomorrow'`. Run this before deploying the API, since EF selects all three columns:**
+
+```sql
+ALTER TABLE restaurant_profiles
+ADD COLUMN IF NOT EXISTS show_top_hours_section BOOLEAN NOT NULL DEFAULT TRUE,
+ADD COLUMN IF NOT EXISTS top_hours_style VARCHAR(20) NOT NULL DEFAULT 'standard',
+ADD COLUMN IF NOT EXISTS top_hours_open_status_detail VARCHAR(30) NOT NULL DEFAULT 'none';
+
+ALTER TABLE restaurant_profiles
+ADD CONSTRAINT top_hours_style_values CHECK (top_hours_style IN ('standard', 'open-status')),
+ADD CONSTRAINT top_hours_open_status_detail_values CHECK (top_hours_open_status_detail IN ('none', 'today', 'today-and-tomorrow'));
 ```
 
 **For existing databases, add the custom background settings (two radial-gradient glow colors drawn over the restaurant site's default background; `show_custom_background` defaults to FALSE so existing sites keep the default background, and the colors stay stored while the toggle is off). Run this before deploying the API, since EF selects all three columns:**

@@ -112,6 +112,9 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             CustomBackgroundSplash1Active: profile.CustomBackgroundSplash1Active,
             CustomBackgroundSplash2Active: profile.CustomBackgroundSplash2Active,
             CustomBackgroundImageUrl: profile.CustomBackgroundImageUrl,
-            CustomBackgroundImageActive: profile.CustomBackgroundImageActive));
+            CustomBackgroundImageActive: profile.CustomBackgroundImageActive,
+            ShowTopHoursSection: profile.ShowTopHoursSection,
+            TopHoursStyle: profile.TopHoursStyle,
+            TopHoursOpenStatusDetail: profile.TopHoursOpenStatusDetail));
     }
 }

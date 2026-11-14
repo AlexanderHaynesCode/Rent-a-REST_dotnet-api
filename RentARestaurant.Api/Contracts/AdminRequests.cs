@@ -40,7 +40,27 @@ public sealed record UpsertBusinessHourRequest(
     TimeOnly CloseTime,
     bool IsClosed);
 
-public sealed record SetHoursStyleRequest(bool UseLegacyHoursStyle);
+public sealed record SetTopHoursSectionRequest(
+    bool ShowTopHoursSection,
+    string TopHoursStyle,
+    string TopHoursOpenStatusDetail,
+    bool UseLegacyHoursStyle);
+
+/// <summary>Allowed values for the top-of-page hours section settings (mirrored by DB CHECK constraints).</summary>
+public static class TopHoursOptions
+{
+    /// <summary>The full weekly hours list.</summary>
+    public const string StandardStyle = "standard";
+    /// <summary>An "Open Now!"/"Closed" message computed from the visitor's current time.</summary>
+    public const string OpenStatusStyle = "open-status";
+
+    public const string NoDetail = "none";
+    public const string TodayDetail = "today";
+    public const string TodayAndTomorrowDetail = "today-and-tomorrow";
+
+    public static readonly IReadOnlySet<string> Styles = new HashSet<string> { StandardStyle, OpenStatusStyle };
+    public static readonly IReadOnlySet<string> OpenStatusDetails = new HashSet<string> { NoDetail, TodayDetail, TodayAndTomorrowDetail };
+}
 
 public sealed record SetBottomHoursSectionRequest(
     bool ShowBottomHoursSection,

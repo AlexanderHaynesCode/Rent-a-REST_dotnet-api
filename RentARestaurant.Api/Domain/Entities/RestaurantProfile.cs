@@ -17,6 +17,9 @@ public class RestaurantProfile : ITenantEntity
     public string? Address { get; set; }
     public string? PhoneNumber { get; set; }
     public bool UseLegacyHoursStyle { get; set; }
+    public bool ShowTopHoursSection { get; set; } = true;
+    public string TopHoursStyle { get; set; } = Contracts.TopHoursOptions.StandardStyle;
+    public string TopHoursOpenStatusDetail { get; set; } = Contracts.TopHoursOptions.NoDetail;
     public bool ShowBottomHoursSection { get; set; } = true;
     public bool UseLegacyBottomHoursStyle { get; set; }
     public bool ShowCustomBackground { get; set; }

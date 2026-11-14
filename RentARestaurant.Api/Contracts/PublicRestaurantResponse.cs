@@ -31,7 +31,10 @@ public sealed record PublicRestaurantResponse(
     bool CustomBackgroundSplash1Active = true,
     bool CustomBackgroundSplash2Active = true,
     string? CustomBackgroundImageUrl = null,
-    bool CustomBackgroundImageActive = true);
+    bool CustomBackgroundImageActive = true,
+    bool ShowTopHoursSection = true,
+    string TopHoursStyle = TopHoursOptions.StandardStyle,
+    string TopHoursOpenStatusDetail = TopHoursOptions.NoDetail);
 
 /// <summary>Only populated by the admin/agent snapshot; the public storefront response leaves it null.</summary>
 public sealed record DateSpecificHourSnapshot(

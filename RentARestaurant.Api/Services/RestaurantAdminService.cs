@@ -27,7 +27,7 @@ public interface IRestaurantAdminService
 
     Task UpsertHoursAsync(Guid tenantId, IReadOnlyList<UpsertBusinessHourRequest> request, CancellationToken cancellationToken);
 
-    Task<bool> SetHoursStyleAsync(Guid tenantId, bool useLegacyHoursStyle, CancellationToken cancellationToken);
+    Task<bool> SetTopHoursSectionAsync(Guid tenantId, SetTopHoursSectionRequest request, CancellationToken cancellationToken);
 
     Task<bool> SetBottomHoursSectionAsync(Guid tenantId, bool showBottomHoursSection, bool useLegacyBottomHoursStyle, CancellationToken cancellationToken);
 
@@ -156,7 +156,10 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 profile.CustomBackgroundSplash1Active,
                 profile.CustomBackgroundSplash2Active,
                 profile.CustomBackgroundImageUrl,
-                profile.CustomBackgroundImageActive);
+                profile.CustomBackgroundImageActive,
+                ShowTopHoursSection: profile.ShowTopHoursSection,
+                TopHoursStyle: profile.TopHoursStyle,
+                TopHoursOpenStatusDetail: profile.TopHoursOpenStatusDetail);
     }
 
     public async Task<bool> UpdateBrandingAsync(Guid tenantId, UpdateBrandingRequest request, CancellationToken cancellationToken)
@@ -229,7 +232,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<bool> SetHoursStyleAsync(Guid tenantId, bool useLegacyHoursStyle, CancellationToken cancellationToken)
+    public async Task<bool> SetTopHoursSectionAsync(Guid tenantId, SetTopHoursSectionRequest request, CancellationToken cancellationToken)
     {
         var profile = await dbContext.RestaurantProfiles
             .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
@@ -239,7 +242,10 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             return false;
         }
 
-        profile.UseLegacyHoursStyle = useLegacyHoursStyle;
+        profile.ShowTopHoursSection = request.ShowTopHoursSection;
+        profile.TopHoursStyle = request.TopHoursStyle;
+        profile.TopHoursOpenStatusDetail = request.TopHoursOpenStatusDetail;
+        profile.UseLegacyHoursStyle = request.UseLegacyHoursStyle;
         profile.UpdatedUtc = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
