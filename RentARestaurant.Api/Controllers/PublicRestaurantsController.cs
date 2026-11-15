@@ -155,6 +155,7 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             ShowBottomContactSection: profile.ShowBottomContactSection,
             ContactHoursWhiteBackground: profile.ContactHoursWhiteBackground,
             ContactHoursWhiteBackgroundTransparency: profile.ContactHoursWhiteBackgroundTransparency,
+            ApplyTransparencyToMenuItems: profile.ApplyTransparencyToMenuItems,
             HideHeroImage: profile.HideHeroImage));
     }
 }

@@ -249,6 +249,7 @@ CREATE TABLE restaurant_profiles (
     show_bottom_contact_section BOOLEAN NOT NULL DEFAULT TRUE,
     contact_hours_white_background BOOLEAN NOT NULL DEFAULT FALSE,
     contact_hours_white_background_transparency INTEGER NOT NULL DEFAULT 0,
+    apply_transparency_to_menu_items BOOLEAN NOT NULL DEFAULT FALSE,
     hide_hero_image BOOLEAN NOT NULL DEFAULT FALSE,
     updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
@@ -379,6 +380,13 @@ ADD COLUMN IF NOT EXISTS contact_hours_white_background_transparency INTEGER NOT
 
 ALTER TABLE restaurant_profiles
 ADD CONSTRAINT contact_hours_white_background_transparency_range CHECK (contact_hours_white_background_transparency BETWEEN 0 AND 100);
+```
+
+**For existing databases, add the apply-transparency-to-menu-items setting (set by the admin portal's "Apply transparency setting to menu items" checkbox, nested under "Add white background to Contact and Hours sections" on the Branding page). When both `contact_hours_white_background` and `apply_transparency_to_menu_items` are TRUE, the restaurant site's menu item cards fade their white fill by `contact_hours_white_background_transparency` too. It defaults to FALSE, so menu item cards keep their solid white fill. The setting is kept while the white background checkbox is off so re-enabling restores it. Run this before deploying the API, since EF selects the column:**
+
+```sql
+ALTER TABLE restaurant_profiles
+ADD COLUMN IF NOT EXISTS apply_transparency_to_menu_items BOOLEAN NOT NULL DEFAULT FALSE;
 ```
 
 **For existing databases, add the hide hero image setting (set by the admin portal's "Hide hero image" checkbox on the Branding page). When `hide_hero_image` is TRUE, the restaurant site leaves out the hero image at the top of the page and shows the logo in line with the display name/tagline row instead of overlapping the hero. `hero_image_url` is left as is, so unchecking the box brings the uploaded hero image back.**

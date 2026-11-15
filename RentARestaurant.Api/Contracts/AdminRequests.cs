@@ -28,6 +28,7 @@ public sealed record UpdateBrandingRequest(
     bool ShowBottomContactSection = true,
     bool ContactHoursWhiteBackground = false,
     int ContactHoursWhiteBackgroundTransparency = ContactHoursWhiteBackgroundDefaults.Transparency,
+    bool ApplyTransparencyToMenuItems = false,
     bool HideHeroImage = false);
 
 /// <summary>Range of the Contact/Hours white background's transparency (0 = solid white, 100 = see-through).</summary>

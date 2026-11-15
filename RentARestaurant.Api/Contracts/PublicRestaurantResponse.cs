@@ -42,6 +42,7 @@ public sealed record PublicRestaurantResponse(
     bool ShowBottomContactSection = true,
     bool ContactHoursWhiteBackground = false,
     int ContactHoursWhiteBackgroundTransparency = ContactHoursWhiteBackgroundDefaults.Transparency,
+    bool ApplyTransparencyToMenuItems = false,
     bool HideHeroImage = false);
 
 /// <summary>

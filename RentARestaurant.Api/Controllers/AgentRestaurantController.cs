@@ -437,6 +437,7 @@ public class AgentRestaurantController(
             ShowBottomContactSection: profile.ShowBottomContactSection,
             ContactHoursWhiteBackground: profile.ContactHoursWhiteBackground,
             ContactHoursWhiteBackgroundTransparency: profile.ContactHoursWhiteBackgroundTransparency,
+            ApplyTransparencyToMenuItems: profile.ApplyTransparencyToMenuItems,
             HideHeroImage: profile.HideHeroImage);
 
         var updated = await restaurantAdminService.UpdateBrandingAsync(tenantId, merged, cancellationToken);

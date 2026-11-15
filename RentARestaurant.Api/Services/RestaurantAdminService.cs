@@ -200,6 +200,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 ShowBottomContactSection: profile.ShowBottomContactSection,
                 ContactHoursWhiteBackground: profile.ContactHoursWhiteBackground,
                 ContactHoursWhiteBackgroundTransparency: profile.ContactHoursWhiteBackgroundTransparency,
+                ApplyTransparencyToMenuItems: profile.ApplyTransparencyToMenuItems,
                 HideHeroImage: profile.HideHeroImage);
     }
 
@@ -239,6 +240,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         profile.ShowBottomContactSection = request.ShowBottomContactSection;
         profile.ContactHoursWhiteBackground = request.ContactHoursWhiteBackground;
         profile.ContactHoursWhiteBackgroundTransparency = request.ContactHoursWhiteBackgroundTransparency;
+        profile.ApplyTransparencyToMenuItems = request.ApplyTransparencyToMenuItems;
         profile.HideHeroImage = request.HideHeroImage;
         profile.UpdatedUtc = DateTime.UtcNow;
 
