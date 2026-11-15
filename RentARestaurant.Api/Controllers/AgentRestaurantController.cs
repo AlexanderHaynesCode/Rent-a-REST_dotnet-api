@@ -465,10 +465,22 @@ public class AgentRestaurantController(
         {
             case AgentItemAction.Create:
                 var name = change.Name ?? "New Category";
-                var createdCategoryId = await restaurantAdminService.CreateMenuCategoryAsync(
+                // No MenuId: agent-created categories go into the tenant's default (first) menu.
+                var created = await restaurantAdminService.CreateMenuCategoryAsync(
                     tenantId, new CreateMenuCategoryRequest(name, change.SortOrder ?? 0, description), cancellationToken);
-                newCategoryIdsByName[name] = createdCategoryId;
-                summary.Add($"Created menu category '{name}'.");
+                switch (created.Status)
+                {
+                    case MenuMutationStatus.Success:
+                        newCategoryIdsByName[name] = created.Id!.Value;
+                        summary.Add($"Created menu category '{name}'.");
+                        break;
+                    case MenuMutationStatus.LimitReached:
+                        summary.Add($"Skipped creating menu category '{name}' - the {MenuLimits.MaxCategoriesPerTenant}-category limit was reached.");
+                        break;
+                    case MenuMutationStatus.DuplicateName:
+                        summary.Add($"Skipped creating menu category '{name}' - a category with that name already exists.");
+                        break;
+                }
                 break;
 
             case AgentItemAction.Update:
@@ -482,8 +494,10 @@ public class AgentRestaurantController(
                     var mergedDescription = description ?? current.Description;
                     var mergedSortOrder = change.SortOrder ?? current.SortOrder;
                     var updated = await restaurantAdminService.UpdateMenuCategoryAsync(
-                        tenantId, categoryId, mergedName, mergedDescription, mergedSortOrder, cancellationToken);
-                    if (updated) summary.Add($"Updated menu category '{mergedName}'.");
+                        tenantId, categoryId, mergedName, mergedDescription, mergedSortOrder, menuId: null, cancellationToken);
+                    if (updated.Status == MenuMutationStatus.Success) summary.Add($"Updated menu category '{mergedName}'.");
+                    else if (updated.Status == MenuMutationStatus.DuplicateName)
+                        summary.Add($"Skipped renaming menu category to '{mergedName}' - a category with that name already exists.");
                 }
                 break;
 
@@ -537,6 +551,10 @@ public class AgentRestaurantController(
                     if (result.Status == MenuItemMutationStatus.Success)
                     {
                         summary.Add($"Created menu item '{request.Name}' (${request.Price:0.00}).");
+                    }
+                    else if (result.Status == MenuItemMutationStatus.LimitReached)
+                    {
+                        summary.Add($"Skipped menu item '{request.Name}' - the {MenuLimits.MaxItemsPerTenant}-item limit was reached.");
                     }
                 }
                 else

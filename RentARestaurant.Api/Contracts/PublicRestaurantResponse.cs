@@ -35,7 +35,20 @@ public sealed record PublicRestaurantResponse(
     bool ShowTopHoursSection = true,
     string TopHoursStyle = TopHoursOptions.StandardStyle,
     string TopHoursOpenStatusDetail = TopHoursOptions.NoDetail,
-    IReadOnlyList<DailyHourResponse>? DailyHours = null);
+    IReadOnlyList<DailyHourResponse>? DailyHours = null,
+    IReadOnlyList<PublicMenuResponse>? Menus = null,
+    bool AllowMenuPdfDownload = true);
+
+/// <summary>
+/// The public storefront response only includes visible menus; the admin/agent snapshot includes all
+/// of them so a rollback never drops categories that sit in a hidden menu.
+/// </summary>
+public sealed record PublicMenuResponse(
+    Guid Id,
+    string Name,
+    string Description,
+    int SortOrder,
+    bool IsVisible);
 
 /// <summary>
 /// The hours that apply on one calendar date: that date's date-specific override, or else the
@@ -61,7 +74,8 @@ public sealed record PublicMenuCategoryResponse(
     string Name,
     string Description,
     int SortOrder,
-    IReadOnlyList<PublicMenuItemResponse> Items);
+    IReadOnlyList<PublicMenuItemResponse> Items,
+    Guid? MenuId = null);
 
 public sealed record PublicMenuItemResponse(
     Guid Id,

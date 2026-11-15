@@ -35,8 +35,18 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             .AsNoTracking()
             .FirstAsync(x => x.Id == tenantContext.TenantId!.Value, cancellationToken);
 
+        // Hidden menus (and their categories) stay off the storefront.
+        var menus = await dbContext.Menus
+            .AsNoTracking()
+            .Where(x => x.IsVisible)
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+        var visibleMenuIds = menus.Select(x => x.Id).ToList();
+
         var categories = await dbContext.MenuCategories
             .AsNoTracking()
+            .Where(x => visibleMenuIds.Contains(x.MenuId))
             .OrderBy(x => x.SortOrder)
             .ToListAsync(cancellationToken);
 
@@ -94,7 +104,8 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
                         item.Price,
                         item.IsAvailable,
                         item.SortOrder))
-                    .ToList()))
+                    .ToList(),
+                category.MenuId))
             .ToList();
 
         return Ok(new PublicRestaurantResponse(
@@ -135,6 +146,10 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             ShowTopHoursSection: profile.ShowTopHoursSection,
             TopHoursStyle: profile.TopHoursStyle,
             TopHoursOpenStatusDetail: profile.TopHoursOpenStatusDetail,
-            DailyHours: dailyHours));
+            DailyHours: dailyHours,
+            Menus: menus
+                .Select(m => new PublicMenuResponse(m.Id, m.Name, m.Description, m.SortOrder, m.IsVisible))
+                .ToList(),
+            AllowMenuPdfDownload: profile.AllowMenuPdfDownload));
     }
 }

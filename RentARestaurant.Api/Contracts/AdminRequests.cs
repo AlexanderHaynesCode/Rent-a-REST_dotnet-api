@@ -72,15 +72,44 @@ public sealed record UpsertDateSpecificHourRequest(
     TimeOnly CloseTime,
     bool IsClosed);
 
+/// <summary>MenuId null means the tenant's default menu (the first by sort order).</summary>
 public sealed record CreateMenuCategoryRequest(
     string Name,
     int SortOrder,
-    string? Description = null);
+    string? Description = null,
+    Guid? MenuId = null);
 
+/// <summary>MenuId null keeps the category in its current menu.</summary>
 public sealed record UpdateMenuCategoryRequest(
     string Name,
     string Description,
-    int SortOrder);
+    int SortOrder,
+    Guid? MenuId = null);
+
+public sealed record CreateMenuRequest(
+    string Name,
+    int SortOrder,
+    string? Description = null,
+    bool IsVisible = true);
+
+public sealed record UpdateMenuRequest(
+    string Name,
+    string Description,
+    int SortOrder,
+    bool IsVisible);
+
+public sealed record SetMenuSettingsRequest(
+    bool AllowMenuPdfDownload);
+
+/// <summary>Per-tenant caps, enforced for both admin and agent writes.</summary>
+public static class MenuLimits
+{
+    public const int MaxMenusPerTenant = 5;
+    public const int MaxCategoriesPerTenant = 100;
+    public const int MaxItemsPerTenant = 1000;
+    public const int MaxNameLength = 120;
+    public const int MaxDescriptionLength = 300;
+}
 
 public sealed record CreateMenuItemRequest(
     Guid CategoryId,

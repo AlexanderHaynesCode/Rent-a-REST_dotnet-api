@@ -40,10 +40,20 @@ public static class DbInitializer
             PrimaryCtaUrl = "https://example.com/order"
         });
 
+        var menu = new Menu
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Name = Menu.DefaultName
+        };
+
+        dbContext.Menus.Add(menu);
+
         var mains = new MenuCategory
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
+            MenuId = menu.Id,
             Name = "Mains",
             SortOrder = 1
         };
@@ -123,10 +133,20 @@ public static class DbInitializer
             PrimaryCtaUrl = "https://www.wendys.com/order"
         });
 
+        var menu2 = new Menu
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId2,
+            Name = Menu.DefaultName
+        };
+
+        dbContext.Menus.Add(menu2);
+
         var mains2 = new MenuCategory
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId2,
+            MenuId = menu2.Id,
             Name = "Mains",
             SortOrder = 1
         };

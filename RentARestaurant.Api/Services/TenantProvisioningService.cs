@@ -109,6 +109,14 @@ public class TenantProvisioningService(
             SecondaryHexColor = "#aaaaaa"
         };
 
+        var defaultMenu = new Menu
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Name = Menu.DefaultName,
+            SortOrder = 0
+        };
+
         var businessHours = new List<BusinessHour>();
         for (var i = 0; i < 7; i++)        {
             businessHours.Add(new BusinessHour
@@ -147,6 +155,7 @@ public class TenantProvisioningService(
         dbContext.Tenants.Add(tenant);
         dbContext.TenantUsers.Add(tenantUser);
         dbContext.RestaurantProfiles.Add(profile);
+        dbContext.Menus.Add(defaultMenu);
         dbContext.BusinessHours.AddRange(businessHours);
         dbContext.SubscriptionEvents.Add(subscriptionEvent);
         dbContext.TenantSubscriptions.Add(tenantSubscription);

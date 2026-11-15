@@ -27,7 +27,7 @@ This document details the database schema for the Rent-a-Restaurant API, mapping
 Tenant (1) ──────── (1) RestaurantProfile
   │
   ├──── (1:N) TenantUser
-  ├──── (1:N) MenuCategory ──── (1:N) MenuItem
+  ├──── (1:N) Menu ──── (1:N) MenuCategory ──── (1:N) MenuItem
     ├──── (1:N) BusinessHour
     └──── (1:N) ProvisioningSession
     └──── (1:1) TenantSubscription
@@ -244,6 +244,7 @@ CREATE TABLE restaurant_profiles (
     custom_background_splash_2_active BOOLEAN NOT NULL DEFAULT TRUE,
     custom_background_image_url TEXT,
     custom_background_image_active BOOLEAN NOT NULL DEFAULT TRUE,
+    allow_menu_pdf_download BOOLEAN NOT NULL DEFAULT TRUE,
     updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -386,26 +387,114 @@ CREATE INDEX idx_tenant_users_created_utc ON tenant_users(created_utc);
 
 ---
 
+### 4b. Menus Table
+
+A tenant can have up to 5 menus (e.g. "Lunch", "Dinner"); the cap is enforced by the API (`MenuLimits`), not the DB. Every tenant has at least one: provisioning creates a default menu named `Menu`, and the API refuses to delete a tenant's last menu. Hidden menus (`is_visible = FALSE`) and their categories are left out of the public storefront response.
+
+```sql
+CREATE TABLE menus (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    name VARCHAR(120) NOT NULL,
+    description VARCHAR(300) NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_visible BOOLEAN NOT NULL DEFAULT TRUE,
+
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    UNIQUE(tenant_id, name),
+    CONSTRAINT name_not_empty CHECK (name != '')
+);
+
+CREATE INDEX idx_menus_sort_order ON menus(tenant_id, sort_order);
+```
+
+**For existing databases, add multiple-menu support.** Every existing tenant gets one default menu named `Menu`, and all of its current categories are moved into it, so existing storefronts look the same. This also adds `restaurant_profiles.allow_menu_pdf_download` (the storefront's "Download Menu (PDF)" button; defaults to TRUE so existing sites keep the button). Run it in two steps around the API deploy:
+
+**Step 1: run before deploying the API** (the new API selects `menus`, `menu_categories.menu_id` and `allow_menu_pdf_download`). `menu_id` stays nullable here so the old API can keep creating categories until the new one is live. Safe to re-run.
+
+```sql
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS menus (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    name VARCHAR(120) NOT NULL,
+    description VARCHAR(300) NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_visible BOOLEAN NOT NULL DEFAULT TRUE,
+
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    UNIQUE(tenant_id, name),
+    CONSTRAINT name_not_empty CHECK (name != '')
+);
+
+CREATE INDEX IF NOT EXISTS idx_menus_sort_order ON menus(tenant_id, sort_order);
+
+-- One default "Menu" per tenant.
+INSERT INTO menus (tenant_id, name, sort_order)
+SELECT id, 'Menu', 0 FROM tenants
+ON CONFLICT (tenant_id, name) DO NOTHING;
+
+ALTER TABLE menu_categories
+ADD COLUMN IF NOT EXISTS menu_id UUID REFERENCES menus(id) ON DELETE CASCADE;
+
+-- Point every existing category at its tenant's default menu.
+UPDATE menu_categories c
+SET menu_id = m.id
+FROM menus m
+WHERE m.tenant_id = c.tenant_id AND m.name = 'Menu' AND c.menu_id IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_menu_categories_menu_id ON menu_categories(menu_id, sort_order);
+
+ALTER TABLE restaurant_profiles
+ADD COLUMN IF NOT EXISTS allow_menu_pdf_download BOOLEAN NOT NULL DEFAULT TRUE;
+
+COMMIT;
+```
+
+**Step 2: run right after the new API is live.** It catches any category the old API created between the two steps, makes `menu_id` required, and changes category-name uniqueness from per-tenant to per-menu ("Appetizers" can be on both Lunch and Dinner). The old constraint name below is PostgreSQL's default for `UNIQUE(tenant_id, name)`; if your DB named it differently, look it up with `\d menu_categories` first.
+
+```sql
+BEGIN;
+
+UPDATE menu_categories c
+SET menu_id = m.id
+FROM menus m
+WHERE m.tenant_id = c.tenant_id AND m.name = 'Menu' AND c.menu_id IS NULL;
+
+ALTER TABLE menu_categories ALTER COLUMN menu_id SET NOT NULL;
+
+ALTER TABLE menu_categories DROP CONSTRAINT IF EXISTS menu_categories_tenant_id_name_key;
+ALTER TABLE menu_categories ADD CONSTRAINT menu_categories_menu_id_name_key UNIQUE (menu_id, name);
+
+COMMIT;
+```
+
+---
+
 ### 5. MenuCategories Table
 
 ```sql
 CREATE TABLE menu_categories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
+    menu_id UUID NOT NULL,
     name VARCHAR(120) NOT NULL,
     description VARCHAR(300) NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
-    
+
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-    UNIQUE(tenant_id, name),
+    FOREIGN KEY (menu_id) REFERENCES menus(id) ON DELETE CASCADE,
+    UNIQUE(menu_id, name),
     CONSTRAINT name_not_empty CHECK (name != '')
 );
 
 CREATE INDEX idx_menu_categories_tenant_id ON menu_categories(tenant_id);
 CREATE INDEX idx_menu_categories_sort_order ON menu_categories(tenant_id, sort_order);
+CREATE INDEX idx_menu_categories_menu_id ON menu_categories(menu_id, sort_order);
 ```
 
-**Note:** Added `UNIQUE(tenant_id, name)` to match `HasIndex(x => new { x.TenantId, x.Name }).IsUnique()` in `AppDbContext` — without it, the DB would silently allow duplicate category names per tenant.
+**Note:** `UNIQUE(menu_id, name)` matches `HasIndex(x => new { x.MenuId, x.Name }).IsUnique()` in `AppDbContext`, so category names only need to be unique within a menu. (Before multiple menus it was `UNIQUE(tenant_id, name)`.) The API caps each tenant at 100 categories and 1,000 items (`MenuLimits`).
 
 **For existing databases, add the optional category description column:**
 
@@ -593,19 +682,36 @@ CREATE INDEX idx_tenant_users_tenant_id ON tenant_users(tenant_id);
 CREATE INDEX idx_tenant_users_email ON tenant_users(email);
 CREATE INDEX idx_tenant_users_created_utc ON tenant_users(created_utc);
 
-CREATE TABLE menu_categories (
+CREATE TABLE menus (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     name VARCHAR(120) NOT NULL,
     description VARCHAR(300) NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
+    is_visible BOOLEAN NOT NULL DEFAULT TRUE,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     UNIQUE(tenant_id, name),
     CONSTRAINT name_not_empty CHECK (name != '')
 );
 
+CREATE INDEX idx_menus_sort_order ON menus(tenant_id, sort_order);
+
+CREATE TABLE menu_categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    menu_id UUID NOT NULL,
+    name VARCHAR(120) NOT NULL,
+    description VARCHAR(300) NOT NULL DEFAULT '',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    FOREIGN KEY (menu_id) REFERENCES menus(id) ON DELETE CASCADE,
+    UNIQUE(menu_id, name),
+    CONSTRAINT name_not_empty CHECK (name != '')
+);
+
 CREATE INDEX idx_menu_categories_tenant_id ON menu_categories(tenant_id);
 CREATE INDEX idx_menu_categories_sort_order ON menu_categories(tenant_id, sort_order);
+CREATE INDEX idx_menu_categories_menu_id ON menu_categories(menu_id, sort_order);
 
 CREATE TABLE menu_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -686,7 +792,7 @@ dotnet add package Npgsql.EntityFrameworkCore.PostgreSQL
 2. **Constraints**: Added CHECK constraints to match Entity Framework validation and prevent invalid data.
 3. **Indexes**: Created on foreign keys, frequently queried columns, and sort orders for optimal query performance.
 4. **Cascading Deletes**: All foreign keys use `ON DELETE CASCADE` to maintain referential integrity when tenants are deleted.
-5. **Uniqueness**: `restaurant_profiles` has a unique constraint on `tenant_id` (1:1 relationship), `menu_categories` has a unique constraint on `(tenant_id, name)`, `tenant_users` has a unique constraint on both `external_user_id` alone and `(tenant_id, external_user_id)`, `tenants.custom_domain` has a unique index, and `business_hours` has a unique constraint on `(tenant_id, day_of_week, date)`.
+5. **Uniqueness**: `restaurant_profiles` has a unique constraint on `tenant_id` (1:1 relationship), `menus` has a unique constraint on `(tenant_id, name)`, `menu_categories` has a unique constraint on `(menu_id, name)`, `tenant_users` has a unique constraint on both `external_user_id` alone and `(tenant_id, external_user_id)`, `tenants.custom_domain` has a unique index, and `business_hours` has a unique constraint on `(tenant_id, day_of_week, date)`.
 
 ---
 

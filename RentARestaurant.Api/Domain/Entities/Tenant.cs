@@ -15,6 +15,7 @@ public class Tenant
 
     public RestaurantProfile? Profile { get; set; }
     public ICollection<TenantUser> Users { get; set; } = new List<TenantUser>();
+    public ICollection<Menu> Menus { get; set; } = new List<Menu>();
     public ICollection<MenuCategory> MenuCategories { get; set; } = new List<MenuCategory>();
     public ICollection<MenuItem> MenuItems { get; set; } = new List<MenuItem>();
     public ICollection<BusinessHour> BusinessHours { get; set; } = new List<BusinessHour>();

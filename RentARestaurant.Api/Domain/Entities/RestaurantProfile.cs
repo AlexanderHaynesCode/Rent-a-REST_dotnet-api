@@ -36,6 +36,7 @@ public class RestaurantProfile : ITenantEntity
     /// <summary>Page background image shown below the hero. Only set by the custom-background image endpoints.</summary>
     public string? CustomBackgroundImageUrl { get; set; }
     public bool CustomBackgroundImageActive { get; set; } = true;
+    public bool AllowMenuPdfDownload { get; set; } = true;
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 
     public Tenant Tenant { get; set; } = null!;

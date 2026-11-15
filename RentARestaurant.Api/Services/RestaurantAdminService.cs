@@ -9,10 +9,24 @@ public enum MenuItemMutationStatus
 {
     Success,
     NotFound,
-    CategoryInvalid
+    CategoryInvalid,
+    LimitReached
 }
 
 public sealed record MenuItemMutationResult(MenuItemMutationStatus Status, Guid? ItemId = null);
+
+/// <summary>Outcome of a menu or menu-category write.</summary>
+public enum MenuMutationStatus
+{
+    Success,
+    NotFound,
+    LimitReached,
+    DuplicateName,
+    MenuInvalid,
+    LastMenu
+}
+
+public sealed record MenuMutationResult(MenuMutationStatus Status, Guid? Id = null);
 
 /// <summary>
 /// Shared read/write logic for a tenant's restaurant profile, menu, and hours. Used by both the
@@ -35,9 +49,19 @@ public interface IRestaurantAdminService
 
     Task<bool> DeleteDateSpecificHourAsync(Guid tenantId, DateOnly date, CancellationToken cancellationToken);
 
-    Task<Guid> CreateMenuCategoryAsync(Guid tenantId, CreateMenuCategoryRequest request, CancellationToken cancellationToken);
+    Task<MenuMutationResult> CreateMenuAsync(Guid tenantId, CreateMenuRequest request, CancellationToken cancellationToken);
 
-    Task<bool> UpdateMenuCategoryAsync(Guid tenantId, Guid categoryId, string name, string description, int sortOrder, CancellationToken cancellationToken);
+    Task<MenuMutationResult> UpdateMenuAsync(Guid tenantId, Guid menuId, UpdateMenuRequest request, CancellationToken cancellationToken);
+
+    /// <summary>Deletes the menu with all of its categories and items. A tenant's last menu cannot be deleted.</summary>
+    Task<MenuMutationResult> DeleteMenuAsync(Guid tenantId, Guid menuId, CancellationToken cancellationToken);
+
+    Task<bool> SetMenuSettingsAsync(Guid tenantId, bool allowMenuPdfDownload, CancellationToken cancellationToken);
+
+    Task<MenuMutationResult> CreateMenuCategoryAsync(Guid tenantId, CreateMenuCategoryRequest request, CancellationToken cancellationToken);
+
+    /// <summary>A null <paramref name="menuId"/> keeps the category in its current menu.</summary>
+    Task<MenuMutationResult> UpdateMenuCategoryAsync(Guid tenantId, Guid categoryId, string name, string description, int sortOrder, Guid? menuId, CancellationToken cancellationToken);
 
     Task<bool> DeleteMenuCategoryAsync(Guid tenantId, Guid categoryId, CancellationToken cancellationToken);
 
@@ -68,6 +92,13 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         var tenant = await dbContext.Tenants
             .AsNoTracking()
             .SingleAsync(x => x.Id == tenantId, cancellationToken);
+
+        var menus = await dbContext.Menus
+            .Where(x => x.TenantId == tenantId)
+            .AsNoTracking()
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.Name)
+            .ToListAsync(cancellationToken);
 
         var categories = await dbContext.MenuCategories
             .Where(x => x.TenantId == tenantId)
@@ -118,7 +149,8 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                         item.Price,
                         item.IsAvailable,
                         item.SortOrder))
-                    .ToList()))
+                    .ToList(),
+                category.MenuId))
             .ToList();
 
         return new PublicRestaurantResponse(
@@ -159,7 +191,11 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 profile.CustomBackgroundImageActive,
                 ShowTopHoursSection: profile.ShowTopHoursSection,
                 TopHoursStyle: profile.TopHoursStyle,
-                TopHoursOpenStatusDetail: profile.TopHoursOpenStatusDetail);
+                TopHoursOpenStatusDetail: profile.TopHoursOpenStatusDetail,
+                Menus: menus
+                    .Select(m => new PublicMenuResponse(m.Id, m.Name, m.Description, m.SortOrder, m.IsVisible))
+                    .ToList(),
+                AllowMenuPdfDownload: profile.AllowMenuPdfDownload);
     }
 
     public async Task<bool> UpdateBrandingAsync(Guid tenantId, UpdateBrandingRequest request, CancellationToken cancellationToken)
@@ -319,12 +355,140 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         return true;
     }
 
-    public async Task<Guid> CreateMenuCategoryAsync(Guid tenantId, CreateMenuCategoryRequest request, CancellationToken cancellationToken)
+    public async Task<MenuMutationResult> CreateMenuAsync(Guid tenantId, CreateMenuRequest request, CancellationToken cancellationToken)
     {
+        var menuCount = await dbContext.Menus.CountAsync(x => x.TenantId == tenantId, cancellationToken);
+        if (menuCount >= MenuLimits.MaxMenusPerTenant)
+        {
+            return new MenuMutationResult(MenuMutationStatus.LimitReached);
+        }
+
+        if (await MenuNameTakenAsync(tenantId, request.Name, excludeMenuId: null, cancellationToken))
+        {
+            return new MenuMutationResult(MenuMutationStatus.DuplicateName);
+        }
+
+        var menu = new Menu
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Name = request.Name,
+            Description = request.Description?.Trim() ?? string.Empty,
+            SortOrder = request.SortOrder,
+            IsVisible = request.IsVisible
+        };
+
+        dbContext.Menus.Add(menu);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new MenuMutationResult(MenuMutationStatus.Success, menu.Id);
+    }
+
+    public async Task<MenuMutationResult> UpdateMenuAsync(Guid tenantId, Guid menuId, UpdateMenuRequest request, CancellationToken cancellationToken)
+    {
+        var menu = await dbContext.Menus
+            .SingleOrDefaultAsync(x => x.Id == menuId && x.TenantId == tenantId, cancellationToken);
+
+        if (menu is null)
+        {
+            return new MenuMutationResult(MenuMutationStatus.NotFound);
+        }
+
+        if (await MenuNameTakenAsync(tenantId, request.Name, excludeMenuId: menuId, cancellationToken))
+        {
+            return new MenuMutationResult(MenuMutationStatus.DuplicateName, menuId);
+        }
+
+        menu.Name = request.Name;
+        menu.Description = request.Description.Trim();
+        menu.SortOrder = request.SortOrder;
+        menu.IsVisible = request.IsVisible;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new MenuMutationResult(MenuMutationStatus.Success, menuId);
+    }
+
+    public async Task<MenuMutationResult> DeleteMenuAsync(Guid tenantId, Guid menuId, CancellationToken cancellationToken)
+    {
+        var menu = await dbContext.Menus
+            .SingleOrDefaultAsync(x => x.Id == menuId && x.TenantId == tenantId, cancellationToken);
+
+        if (menu is null)
+        {
+            return new MenuMutationResult(MenuMutationStatus.NotFound);
+        }
+
+        // Every category must belong to a menu, so the last menu stays.
+        var menuCount = await dbContext.Menus.CountAsync(x => x.TenantId == tenantId, cancellationToken);
+        if (menuCount <= 1)
+        {
+            return new MenuMutationResult(MenuMutationStatus.LastMenu, menuId);
+        }
+
+        var categories = await dbContext.MenuCategories
+            .Where(x => x.TenantId == tenantId && x.MenuId == menuId)
+            .ToListAsync(cancellationToken);
+        var categoryIds = categories.Select(x => x.Id).ToList();
+        var items = await dbContext.MenuItems
+            .Where(x => x.TenantId == tenantId && categoryIds.Contains(x.CategoryId))
+            .ToListAsync(cancellationToken);
+
+        dbContext.MenuItems.RemoveRange(items);
+        dbContext.MenuCategories.RemoveRange(categories);
+        dbContext.Menus.Remove(menu);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new MenuMutationResult(MenuMutationStatus.Success, menuId);
+    }
+
+    public async Task<bool> SetMenuSettingsAsync(Guid tenantId, bool allowMenuPdfDownload, CancellationToken cancellationToken)
+    {
+        var profile = await dbContext.RestaurantProfiles
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
+
+        if (profile is null)
+        {
+            return false;
+        }
+
+        profile.AllowMenuPdfDownload = allowMenuPdfDownload;
+        profile.UpdatedUtc = DateTime.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<MenuMutationResult> CreateMenuCategoryAsync(Guid tenantId, CreateMenuCategoryRequest request, CancellationToken cancellationToken)
+    {
+        var categoryCount = await dbContext.MenuCategories.CountAsync(x => x.TenantId == tenantId, cancellationToken);
+        if (categoryCount >= MenuLimits.MaxCategoriesPerTenant)
+        {
+            return new MenuMutationResult(MenuMutationStatus.LimitReached);
+        }
+
+        Guid menuId;
+        if (request.MenuId is { } requestedMenuId)
+        {
+            if (!await MenuExistsAsync(tenantId, requestedMenuId, cancellationToken))
+            {
+                return new MenuMutationResult(MenuMutationStatus.MenuInvalid);
+            }
+
+            menuId = requestedMenuId;
+        }
+        else
+        {
+            menuId = await GetOrCreateDefaultMenuIdAsync(tenantId, cancellationToken);
+        }
+
+        if (await CategoryNameTakenAsync(tenantId, menuId, request.Name, excludeCategoryId: null, cancellationToken))
+        {
+            return new MenuMutationResult(MenuMutationStatus.DuplicateName);
+        }
+
         var category = new MenuCategory
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
+            MenuId = menuId,
             Name = request.Name,
             Description = request.Description?.Trim() ?? string.Empty,
             SortOrder = request.SortOrder
@@ -332,25 +496,80 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
 
         dbContext.MenuCategories.Add(category);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return category.Id;
+        return new MenuMutationResult(MenuMutationStatus.Success, category.Id);
     }
 
-    public async Task<bool> UpdateMenuCategoryAsync(Guid tenantId, Guid categoryId, string name, string description, int sortOrder, CancellationToken cancellationToken)
+    public async Task<MenuMutationResult> UpdateMenuCategoryAsync(Guid tenantId, Guid categoryId, string name, string description, int sortOrder, Guid? menuId, CancellationToken cancellationToken)
     {
         var category = await dbContext.MenuCategories
             .SingleOrDefaultAsync(x => x.Id == categoryId && x.TenantId == tenantId, cancellationToken);
 
         if (category is null)
         {
-            return false;
+            return new MenuMutationResult(MenuMutationStatus.NotFound);
         }
 
+        var targetMenuId = menuId ?? category.MenuId;
+        if (targetMenuId != category.MenuId && !await MenuExistsAsync(tenantId, targetMenuId, cancellationToken))
+        {
+            return new MenuMutationResult(MenuMutationStatus.MenuInvalid, categoryId);
+        }
+
+        if (await CategoryNameTakenAsync(tenantId, targetMenuId, name, excludeCategoryId: categoryId, cancellationToken))
+        {
+            return new MenuMutationResult(MenuMutationStatus.DuplicateName, categoryId);
+        }
+
+        category.MenuId = targetMenuId;
         category.Name = name;
         category.Description = description.Trim();
         category.SortOrder = sortOrder;
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return true;
+        return new MenuMutationResult(MenuMutationStatus.Success, categoryId);
+    }
+
+    private Task<bool> MenuExistsAsync(Guid tenantId, Guid menuId, CancellationToken cancellationToken) =>
+        dbContext.Menus.AnyAsync(x => x.Id == menuId && x.TenantId == tenantId, cancellationToken);
+
+    private Task<bool> MenuNameTakenAsync(Guid tenantId, string name, Guid? excludeMenuId, CancellationToken cancellationToken) =>
+        dbContext.Menus.AnyAsync(
+            x => x.TenantId == tenantId && x.Name == name && (excludeMenuId == null || x.Id != excludeMenuId),
+            cancellationToken);
+
+    private Task<bool> CategoryNameTakenAsync(Guid tenantId, Guid menuId, string name, Guid? excludeCategoryId, CancellationToken cancellationToken) =>
+        dbContext.MenuCategories.AnyAsync(
+            x => x.TenantId == tenantId && x.MenuId == menuId && x.Name == name && (excludeCategoryId == null || x.Id != excludeCategoryId),
+            cancellationToken);
+
+    /// <summary>
+    /// The tenant's first menu by sort order, used when a caller (e.g. the agent pipeline) doesn't
+    /// pick one. Creates and saves the default "Menu" if the tenant somehow has none.
+    /// </summary>
+    private async Task<Guid> GetOrCreateDefaultMenuIdAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var existingMenuId = await dbContext.Menus
+            .Where(x => x.TenantId == tenantId)
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.Name)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (existingMenuId is { } menuId)
+        {
+            return menuId;
+        }
+
+        var menu = new Menu
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Name = Menu.DefaultName
+        };
+
+        dbContext.Menus.Add(menu);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return menu.Id;
     }
 
     public async Task<bool> DeleteMenuCategoryAsync(Guid tenantId, Guid categoryId, CancellationToken cancellationToken)
@@ -381,6 +600,12 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         if (!categoryExists)
         {
             return new MenuItemMutationResult(MenuItemMutationStatus.CategoryInvalid);
+        }
+
+        var itemCount = await dbContext.MenuItems.CountAsync(x => x.TenantId == tenantId, cancellationToken);
+        if (itemCount >= MenuLimits.MaxItemsPerTenant)
+        {
+            return new MenuItemMutationResult(MenuItemMutationStatus.LimitReached);
         }
 
         var item = new MenuItem
@@ -541,6 +766,19 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             .Where(x => x.TenantId == tenantId)
             .ToListAsync(cancellationToken);
 
+        // Snapshots taken before multiple menus existed carry no MenuId, and a menu may have been deleted
+        // since the snapshot - either way the category lands in the tenant's default menu.
+        var existingMenuIds = (await dbContext.Menus
+            .Where(x => x.TenantId == tenantId)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken)).ToHashSet();
+        Guid? defaultMenuId = null;
+
+        async Task<Guid> ResolveMenuIdAsync(Guid? snapshotMenuId) =>
+            snapshotMenuId is { } id && existingMenuIds.Contains(id)
+                ? id
+                : defaultMenuId ??= await GetOrCreateDefaultMenuIdAsync(tenantId, cancellationToken);
+
         var snapshotCategoryIds = snapshot.Menu.Select(c => c.Id).ToHashSet();
         var snapshotItemIds = snapshot.Menu.SelectMany(c => c.Items).Select(i => i.Id).ToHashSet();
 
@@ -558,6 +796,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 {
                     Id = category.Id,
                     TenantId = tenantId,
+                    MenuId = await ResolveMenuIdAsync(category.MenuId),
                     Name = category.Name,
                     Description = category.Description,
                     SortOrder = category.SortOrder
@@ -565,6 +804,11 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             }
             else
             {
+                if (category.MenuId is { } snapshotMenuId && existingMenuIds.Contains(snapshotMenuId))
+                {
+                    targetCategory.MenuId = snapshotMenuId;
+                }
+
                 targetCategory.Name = category.Name;
                 targetCategory.Description = category.Description;
                 targetCategory.SortOrder = category.SortOrder;

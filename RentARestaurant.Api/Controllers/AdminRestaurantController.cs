@@ -384,15 +384,22 @@ public class AdminRestaurantController(
     public async Task<ActionResult<Guid>> CreateCategory([FromBody] CreateMenuCategoryRequest request, CancellationToken cancellationToken)
     {
         var description = request.Description?.Trim();
-        if (description?.Length > 300)
+        if (description?.Length > MenuLimits.MaxDescriptionLength)
         {
-            return BadRequest(new { Error = "Category description must be 300 characters or fewer." });
+            return BadRequest(new { Error = $"Category description must be {MenuLimits.MaxDescriptionLength} characters or fewer." });
         }
 
         var trimmedRequest = request with { Name = request.Name.Trim(), Description = description };
-        var categoryId = await restaurantAdminService.CreateMenuCategoryAsync(tenantContext.TenantId!.Value, trimmedRequest, cancellationToken);
+        var result = await restaurantAdminService.CreateMenuCategoryAsync(tenantContext.TenantId!.Value, trimmedRequest, cancellationToken);
 
-        return CreatedAtAction(nameof(GetCurrent), new { }, categoryId);
+        return result.Status switch
+        {
+            MenuMutationStatus.Success => CreatedAtAction(nameof(GetCurrent), new { }, result.Id),
+            MenuMutationStatus.LimitReached => Conflict(new { Error = $"You can have up to {MenuLimits.MaxCategoriesPerTenant} menu categories." }),
+            MenuMutationStatus.DuplicateName => Conflict(new { Error = "That menu already has a category with that name." }),
+            MenuMutationStatus.MenuInvalid => BadRequest(new { Error = "Menu does not exist for this tenant." }),
+            _ => StatusCode(StatusCodes.Status500InternalServerError)
+        };
     }
 
     [HttpPut("menu/categories/{id:guid}")]
@@ -403,42 +410,124 @@ public class AdminRestaurantController(
         [FromBody] UpdateMenuCategoryRequest request,
         CancellationToken cancellationToken)
     {
-        var tenantId = tenantContext.TenantId!.Value;
         var name = request.Name.Trim();
         var description = request.Description.Trim();
 
-        if (description.Length > 300)
+        if (description.Length > MenuLimits.MaxDescriptionLength)
         {
-            return BadRequest(new { Error = "Category description must be 300 characters or fewer." });
+            return BadRequest(new { Error = $"Category description must be {MenuLimits.MaxDescriptionLength} characters or fewer." });
         }
 
-        var categoryExists = await dbContext.MenuCategories
-            .AnyAsync(x => x.Id == id && x.TenantId == tenantId, cancellationToken);
-        if (!categoryExists)
-        {
-            return NotFound();
-        }
-
-        var duplicateNameExists = await dbContext.MenuCategories
-            .AnyAsync(x => x.TenantId == tenantId && x.Id != id && x.Name == name, cancellationToken);
-        if (duplicateNameExists)
-        {
-            return Conflict(new { Error = "A menu category with that name already exists." });
-        }
-
-        var updated = await restaurantAdminService.UpdateMenuCategoryAsync(
-            tenantId,
+        var result = await restaurantAdminService.UpdateMenuCategoryAsync(
+            tenantContext.TenantId!.Value,
             id,
             name,
             description,
             request.SortOrder,
+            request.MenuId,
             cancellationToken);
-        if (!updated)
+
+        return result.Status switch
         {
-            return NotFound();
+            MenuMutationStatus.Success => NoContent(),
+            MenuMutationStatus.NotFound => NotFound(),
+            MenuMutationStatus.DuplicateName => Conflict(new { Error = "That menu already has a category with that name." }),
+            MenuMutationStatus.MenuInvalid => BadRequest(new { Error = "Menu does not exist for this tenant." }),
+            _ => StatusCode(StatusCodes.Status500InternalServerError)
+        };
+    }
+
+    [HttpPost("menus")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<ActionResult<Guid>> CreateMenu([FromBody] CreateMenuRequest request, CancellationToken cancellationToken)
+    {
+        var trimmedRequest = request with { Name = request.Name.Trim(), Description = request.Description?.Trim() };
+        if (ValidateMenuFields(trimmedRequest.Name, trimmedRequest.Description) is { } error)
+        {
+            return BadRequest(new { Error = error });
         }
 
+        var result = await restaurantAdminService.CreateMenuAsync(tenantContext.TenantId!.Value, trimmedRequest, cancellationToken);
+
+        return result.Status switch
+        {
+            MenuMutationStatus.Success => CreatedAtAction(nameof(GetCurrent), new { }, result.Id),
+            MenuMutationStatus.LimitReached => Conflict(new { Error = $"You can have up to {MenuLimits.MaxMenusPerTenant} menus." }),
+            MenuMutationStatus.DuplicateName => Conflict(new { Error = "A menu with that name already exists." }),
+            _ => StatusCode(StatusCodes.Status500InternalServerError)
+        };
+    }
+
+    [HttpPut("menus/{id:guid}")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> UpdateMenu(Guid id, [FromBody] UpdateMenuRequest request, CancellationToken cancellationToken)
+    {
+        var trimmedRequest = request with { Name = request.Name.Trim(), Description = request.Description.Trim() };
+        if (ValidateMenuFields(trimmedRequest.Name, trimmedRequest.Description) is { } error)
+        {
+            return BadRequest(new { Error = error });
+        }
+
+        var result = await restaurantAdminService.UpdateMenuAsync(tenantContext.TenantId!.Value, id, trimmedRequest, cancellationToken);
+
+        return result.Status switch
+        {
+            MenuMutationStatus.Success => NoContent(),
+            MenuMutationStatus.NotFound => NotFound(),
+            MenuMutationStatus.DuplicateName => Conflict(new { Error = "A menu with that name already exists." }),
+            _ => StatusCode(StatusCodes.Status500InternalServerError)
+        };
+    }
+
+    [HttpDelete("menus/{id:guid}")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> DeleteMenu(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await restaurantAdminService.DeleteMenuAsync(tenantContext.TenantId!.Value, id, cancellationToken);
+
+        return result.Status switch
+        {
+            MenuMutationStatus.Success => NoContent(),
+            MenuMutationStatus.NotFound => NotFound(),
+            MenuMutationStatus.LastMenu => Conflict(new { Error = "Your site needs at least one menu, so the last menu can't be deleted." }),
+            _ => StatusCode(StatusCodes.Status500InternalServerError)
+        };
+    }
+
+    [HttpPut("menus/reorder")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> ReorderMenus([FromBody] IReadOnlyList<MenuReorderEntry> request, CancellationToken cancellationToken)
+    {
+        var ids = request.Select(x => x.Id).ToList();
+        var menus = await dbContext.Menus
+            .Where(x => x.TenantId == tenantContext.TenantId!.Value && ids.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+
+        foreach (var entry in request)
+        {
+            var menu = menus.FirstOrDefault(x => x.Id == entry.Id);
+            if (menu is not null)
+                menu.SortOrder = entry.SortOrder;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
+    }
+
+    [HttpPut("menus/settings")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> SetMenuSettings([FromBody] SetMenuSettingsRequest request, CancellationToken cancellationToken)
+    {
+        var updated = await restaurantAdminService.SetMenuSettingsAsync(
+            tenantContext.TenantId!.Value,
+            request.AllowMenuPdfDownload,
+            cancellationToken);
+        return updated ? NoContent() : NotFound();
     }
 
     [HttpPost("menu/items")]
@@ -452,6 +541,11 @@ public class AdminRestaurantController(
         if (result.Status == MenuItemMutationStatus.CategoryInvalid)
         {
             return BadRequest(new { Error = "Category does not exist for this tenant." });
+        }
+
+        if (result.Status == MenuItemMutationStatus.LimitReached)
+        {
+            return Conflict(new { Error = $"You can have up to {MenuLimits.MaxItemsPerTenant} menu items." });
         }
 
         return CreatedAtAction(nameof(GetCurrent), new { }, result.ItemId);
@@ -569,6 +663,17 @@ public class AdminRestaurantController(
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
+    }
+
+    private static string? ValidateMenuFields(string name, string? description)
+    {
+        if (name.Length == 0)
+            return "Menu name is required.";
+        if (name.Length > MenuLimits.MaxNameLength)
+            return $"Menu name must be {MenuLimits.MaxNameLength} characters or fewer.";
+        if (description?.Length > MenuLimits.MaxDescriptionLength)
+            return $"Menu description must be {MenuLimits.MaxDescriptionLength} characters or fewer.";
+        return null;
     }
 
     private static bool IsSupportedBrandingImageType(string imageType) =>

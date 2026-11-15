@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<TenantUser> TenantUsers => Set<TenantUser>();
     public DbSet<RestaurantProfile> RestaurantProfiles => Set<RestaurantProfile>();
+    public DbSet<Menu> Menus => Set<Menu>();
     public DbSet<MenuCategory> MenuCategories => Set<MenuCategory>();
     public DbSet<MenuItem> MenuItems => Set<MenuItem>();
     public DbSet<BusinessHour> BusinessHours => Set<BusinessHour>();
@@ -99,6 +100,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.CustomBackgroundSplash2Active).HasColumnName("custom_background_splash_2_active");
             entity.Property(x => x.CustomBackgroundImageUrl).HasColumnName("custom_background_image_url");
             entity.Property(x => x.CustomBackgroundImageActive).HasColumnName("custom_background_image_active");
+            entity.Property(x => x.AllowMenuPdfDownload).HasColumnName("allow_menu_pdf_download");
             entity.Property(x => x.UpdatedUtc).HasColumnName("updated_utc");
             entity.HasOne(x => x.Tenant)
                 .WithOne(x => x.Profile)
@@ -106,9 +108,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<MenuCategory>(entity =>
+        modelBuilder.Entity<Menu>(entity =>
         {
-            entity.ToTable("menu_categories", "public");
+            entity.ToTable("menus", "public");
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
             entity.Property(x => x.Id).HasColumnName("id");
@@ -116,9 +118,32 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(120);
             entity.Property(x => x.Description).HasColumnName("description").HasMaxLength(300).HasDefaultValue(string.Empty);
             entity.Property(x => x.SortOrder).HasColumnName("sort_order");
+            entity.Property(x => x.IsVisible).HasColumnName("is_visible");
+            entity.HasOne(x => x.Tenant)
+                .WithMany(x => x.Menus)
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MenuCategory>(entity =>
+        {
+            entity.ToTable("menu_categories", "public");
+            entity.HasKey(x => x.Id);
+            // Category names only need to be unique within their menu ("Appetizers" can be on Lunch and Dinner).
+            entity.HasIndex(x => new { x.MenuId, x.Name }).IsUnique();
+            entity.Property(x => x.Id).HasColumnName("id");
+            entity.Property(x => x.TenantId).HasColumnName("tenant_id");
+            entity.Property(x => x.MenuId).HasColumnName("menu_id");
+            entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(120);
+            entity.Property(x => x.Description).HasColumnName("description").HasMaxLength(300).HasDefaultValue(string.Empty);
+            entity.Property(x => x.SortOrder).HasColumnName("sort_order");
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.MenuCategories)
                 .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Menu)
+                .WithMany(x => x.Categories)
+                .HasForeignKey(x => x.MenuId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
