@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RentARestaurant.Api.Contracts;
 using RentARestaurant.Api.Data;
+using RentARestaurant.Api.Domain.Entities;
 using RentARestaurant.Api.Infrastructure.Tenancy;
 
 namespace RentARestaurant.Api.Controllers;
@@ -45,19 +46,37 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             .ToListAsync(cancellationToken);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var windowEnd = today.AddDays(6);
+
+        // The visitor's local date can be a day either side of the UTC date, and the storefront also
+        // needs the day before (hours running past midnight) and the day after ("Tomorrow's hours"),
+        // so the dated list spans yesterday through a week from today.
+        var dailyWindowStart = today.AddDays(-1);
+        var dailyWindowEnd = today.AddDays(7);
 
         var allHours = await dbContext.BusinessHours
             .AsNoTracking()
-            .Where(h => h.Date == null || (h.Date >= today && h.Date <= windowEnd))
+            .Where(h => h.Date == null || (h.Date >= dailyWindowStart && h.Date <= dailyWindowEnd))
             .ToListAsync(cancellationToken);
 
+        BusinessHour? HoursOn(DateOnly date) =>
+            allHours.FirstOrDefault(h => h.Date == date) ??
+            allHours.FirstOrDefault(h => h.Date == null && h.DayOfWeek == date.DayOfWeek);
+
         var resolvedHours = Enumerable.Range(0, 7)
-            .Select(offset => today.AddDays(offset))
-            .Select(date =>
-                allHours.FirstOrDefault(h => h.Date == date) ??
-                allHours.FirstOrDefault(h => h.Date == null && h.DayOfWeek == date.DayOfWeek))
+            .Select(offset => HoursOn(today.AddDays(offset)))
             .Where(h => h is not null)
+            .ToList();
+
+        var dailyHours = Enumerable.Range(0, dailyWindowEnd.DayNumber - dailyWindowStart.DayNumber + 1)
+            .Select(offset => dailyWindowStart.AddDays(offset))
+            .Select(date => (Date: date, Hour: HoursOn(date)))
+            .Where(x => x.Hour is not null)
+            .Select(x => new DailyHourResponse(
+                x.Date,
+                x.Date.DayOfWeek,
+                x.Hour!.OpenTime.ToString("HH:mm"),
+                x.Hour.CloseTime.ToString("HH:mm"),
+                x.Hour.IsClosed))
             .ToList();
 
         var menu = categories
@@ -115,6 +134,7 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             CustomBackgroundImageActive: profile.CustomBackgroundImageActive,
             ShowTopHoursSection: profile.ShowTopHoursSection,
             TopHoursStyle: profile.TopHoursStyle,
-            TopHoursOpenStatusDetail: profile.TopHoursOpenStatusDetail));
+            TopHoursOpenStatusDetail: profile.TopHoursOpenStatusDetail,
+            DailyHours: dailyHours));
     }
 }

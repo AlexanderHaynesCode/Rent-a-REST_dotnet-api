@@ -458,7 +458,10 @@ CREATE TABLE business_hours (
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     UNIQUE(tenant_id, day_of_week, date),
     CONSTRAINT day_of_week_valid CHECK (day_of_week >= 0 AND day_of_week <= 6),
-    CONSTRAINT close_time_after_open CHECK (close_time > open_time OR is_closed = true)
+    CONSTRAINT close_time_after_open_or_overnight CHECK (
+        is_closed = true
+        OR close_time > open_time
+        OR (close_time < open_time AND close_time <= TIME '04:00'))
 );
 
 CREATE INDEX idx_business_hours_tenant_id ON business_hours(tenant_id);
@@ -467,6 +470,20 @@ CREATE INDEX idx_business_hours_tenant_id ON business_hours(tenant_id);
 **Note on `day_of_week`:** Uses 0-6 mapping (0=Sunday, 1=Monday, ..., 6=Saturday) matching .NET's `DayOfWeek` enum.
 
 **Note on `date`:** `BusinessHour.Date` is a nullable `DateOnly?` used for date-specific overrides (e.g. holiday hours), and the unique index in `AppDbContext` is on `(TenantId, DayOfWeek, Date)`, not just `(TenantId, DayOfWeek)`. This section previously omitted the `date` column entirely, which didn't match the entity and would have broken inserts.
+
+**Note on overnight hours:** A `close_time` earlier than `open_time` means the hours run past midnight into the next morning (e.g. 10:00 – 02:00, or 10:00 – 00:00 for closing at midnight). Overnight closing times are capped at 04:00 because the restaurant site only checks the previous day's hours between midnight and 4 AM. Equal open and close times are rejected. The same rule is enforced by `BusinessHourRules` in the API and by the admin portal's hours editors.
+
+**For existing databases, allow overnight hours (replaces the old `close_time_after_open` constraint, which required `close_time > open_time`). Existing rows already satisfy the new constraint. Run this before deploying the API and admin portal, otherwise overnight hours pass validation but fail on save:**
+
+```sql
+ALTER TABLE business_hours DROP CONSTRAINT IF EXISTS close_time_after_open;
+
+ALTER TABLE business_hours
+ADD CONSTRAINT close_time_after_open_or_overnight CHECK (
+    is_closed = true
+    OR close_time > open_time
+    OR (close_time < open_time AND close_time <= TIME '04:00'));
+```
 
 ---
 
@@ -499,7 +516,10 @@ CREATE TABLE business_hours (
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     UNIQUE(tenant_id, day_of_week),
-    CONSTRAINT close_time_after_open CHECK (close_time > open_time OR is_closed = true)
+    CONSTRAINT close_time_after_open_or_overnight CHECK (
+        is_closed = true
+        OR close_time > open_time
+        OR (close_time < open_time AND close_time <= TIME '04:00'))
 );
 
 CREATE INDEX idx_business_hours_tenant_id ON business_hours(tenant_id);
@@ -618,7 +638,10 @@ CREATE TABLE business_hours (
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     UNIQUE(tenant_id, day_of_week, date),
     CONSTRAINT day_of_week_valid CHECK (day_of_week >= 0 AND day_of_week <= 6),
-    CONSTRAINT close_time_after_open CHECK (close_time > open_time OR is_closed = true)
+    CONSTRAINT close_time_after_open_or_overnight CHECK (
+        is_closed = true
+        OR close_time > open_time
+        OR (close_time < open_time AND close_time <= TIME '04:00'))
 );
 
 CREATE INDEX idx_business_hours_tenant_id ON business_hours(tenant_id);

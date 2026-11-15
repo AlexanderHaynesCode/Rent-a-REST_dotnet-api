@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RentARestaurant.Api.Contracts;
 using RentARestaurant.Api.Data;
+using RentARestaurant.Api.Domain;
 using RentARestaurant.Api.Domain.Entities;
 using RentARestaurant.Api.Infrastructure.Storage;
 using RentARestaurant.Api.Infrastructure.Tenancy;
@@ -203,6 +204,12 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<IActionResult> UpsertHours([FromBody] IReadOnlyList<UpsertBusinessHourRequest> request, CancellationToken cancellationToken)
     {
+        foreach (var item in request)
+        {
+            if (!BusinessHourRules.AreTimesValid(item.OpenTime, item.CloseTime, item.IsClosed))
+                return BadRequest(new { Error = BusinessHourRules.InvalidTimesMessage(item.DayOfWeek.ToString()) });
+        }
+
         await restaurantAdminService.UpsertHoursAsync(tenantContext.TenantId!.Value, request, cancellationToken);
         return NoContent();
     }
@@ -251,8 +258,8 @@ public class AdminRestaurantController(
 
             foreach (var item in request)
             {
-                if (!item.IsClosed && item.OpenTime >= item.CloseTime)
-                    return BadRequest(new { Error = $"Open time must be before close time for {item.Date:yyyy-MM-dd}." });
+                if (!BusinessHourRules.AreTimesValid(item.OpenTime, item.CloseTime, item.IsClosed))
+                    return BadRequest(new { Error = BusinessHourRules.InvalidTimesMessage($"{item.Date:yyyy-MM-dd}") });
             }
 
             var dates = request.Select(x => x.Date).ToList();

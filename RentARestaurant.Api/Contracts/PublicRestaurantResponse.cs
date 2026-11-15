@@ -34,7 +34,20 @@ public sealed record PublicRestaurantResponse(
     bool CustomBackgroundImageActive = true,
     bool ShowTopHoursSection = true,
     string TopHoursStyle = TopHoursOptions.StandardStyle,
-    string TopHoursOpenStatusDetail = TopHoursOptions.NoDetail);
+    string TopHoursOpenStatusDetail = TopHoursOptions.NoDetail,
+    IReadOnlyList<DailyHourResponse>? DailyHours = null);
+
+/// <summary>
+/// The hours that apply on one calendar date: that date's date-specific override, or else the
+/// weekday's regular hours. The storefront uses it for the "Open Now!"/"Closed" check, including
+/// the previous day's hours running past midnight.
+/// </summary>
+public sealed record DailyHourResponse(
+    DateOnly Date,
+    DayOfWeek DayOfWeek,
+    string OpenTime,
+    string CloseTime,
+    bool IsClosed);
 
 /// <summary>Only populated by the admin/agent snapshot; the public storefront response leaves it null.</summary>
 public sealed record DateSpecificHourSnapshot(
