@@ -39,7 +39,10 @@ public sealed record PublicRestaurantResponse(
     IReadOnlyList<PublicMenuResponse>? Menus = null,
     bool AllowMenuPdfDownload = true,
     bool ShowTopContactSection = false,
-    bool ShowBottomContactSection = true);
+    bool ShowBottomContactSection = true,
+    bool ContactHoursWhiteBackground = false,
+    int ContactHoursWhiteBackgroundTransparency = ContactHoursWhiteBackgroundDefaults.Transparency,
+    bool HideHeroImage = false);
 
 /// <summary>
 /// The public storefront response only includes visible menus; the admin/agent snapshot includes all

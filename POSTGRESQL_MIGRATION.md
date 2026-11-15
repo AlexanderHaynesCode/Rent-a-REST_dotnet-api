@@ -247,6 +247,9 @@ CREATE TABLE restaurant_profiles (
     allow_menu_pdf_download BOOLEAN NOT NULL DEFAULT TRUE,
     show_top_contact_section BOOLEAN NOT NULL DEFAULT FALSE,
     show_bottom_contact_section BOOLEAN NOT NULL DEFAULT TRUE,
+    contact_hours_white_background BOOLEAN NOT NULL DEFAULT FALSE,
+    contact_hours_white_background_transparency INTEGER NOT NULL DEFAULT 0,
+    hide_hero_image BOOLEAN NOT NULL DEFAULT FALSE,
     updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -262,7 +265,8 @@ CREATE TABLE restaurant_profiles (
         custom_background_position_2_y BETWEEN 0 AND 100),
     CONSTRAINT hex_color_format_custom_background_main CHECK (custom_background_main_hex_color IS NULL OR custom_background_main_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
     CONSTRAINT top_hours_style_values CHECK (top_hours_style IN ('standard', 'open-status')),
-    CONSTRAINT top_hours_open_status_detail_values CHECK (top_hours_open_status_detail IN ('none', 'today', 'today-and-tomorrow'))
+    CONSTRAINT top_hours_open_status_detail_values CHECK (top_hours_open_status_detail IN ('none', 'today', 'today-and-tomorrow')),
+    CONSTRAINT contact_hours_white_background_transparency_range CHECK (contact_hours_white_background_transparency BETWEEN 0 AND 100)
 );
 
 CREATE INDEX idx_restaurant_profiles_updated_utc ON restaurant_profiles(updated_utc);
@@ -364,6 +368,24 @@ ADD CONSTRAINT hex_color_format_custom_background_main CHECK (custom_background_
 ALTER TABLE restaurant_profiles
 ADD COLUMN IF NOT EXISTS show_top_contact_section BOOLEAN NOT NULL DEFAULT FALSE,
 ADD COLUMN IF NOT EXISTS show_bottom_contact_section BOOLEAN NOT NULL DEFAULT TRUE;
+```
+
+**For existing databases, add the Contact and Hours white background settings (set by the admin portal's "Add white background to Contact and Hours sections" checkbox and its transparency slider on the Branding page). When `contact_hours_white_background` is TRUE, every Contact and Hours section on the restaurant site (including the top-of-page "Open Now!"/"Closed" variant), plus the restaurant name and tagline under the hero and the top of the menu section (the "Menu" heading, PDF download button, and menu tabs), sits on a white card styled like the menu item cards. `contact_hours_white_background_transparency` only fades the card's white fill: 0 = solid white (the default, matching the menu item cards), 100 = fully see-through. The transparency is kept while the checkbox is off so re-enabling restores it.**
+
+```sql
+ALTER TABLE restaurant_profiles
+ADD COLUMN IF NOT EXISTS contact_hours_white_background BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS contact_hours_white_background_transparency INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE restaurant_profiles
+ADD CONSTRAINT contact_hours_white_background_transparency_range CHECK (contact_hours_white_background_transparency BETWEEN 0 AND 100);
+```
+
+**For existing databases, add the hide hero image setting (set by the admin portal's "Hide hero image" checkbox on the Branding page). When `hide_hero_image` is TRUE, the restaurant site leaves out the hero image at the top of the page and shows the logo in line with the display name/tagline row instead of overlapping the hero. `hero_image_url` is left as is, so unchecking the box brings the uploaded hero image back.**
+
+```sql
+ALTER TABLE restaurant_profiles
+ADD COLUMN IF NOT EXISTS hide_hero_image BOOLEAN NOT NULL DEFAULT FALSE;
 ```
 
 ---

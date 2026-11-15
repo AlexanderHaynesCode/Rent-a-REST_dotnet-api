@@ -25,7 +25,18 @@ public sealed record UpdateBrandingRequest(
     // The page background image URL itself is managed only by the images/custom-background endpoints.
     bool CustomBackgroundImageActive = true,
     bool ShowTopContactSection = false,
-    bool ShowBottomContactSection = true);
+    bool ShowBottomContactSection = true,
+    bool ContactHoursWhiteBackground = false,
+    int ContactHoursWhiteBackgroundTransparency = ContactHoursWhiteBackgroundDefaults.Transparency,
+    bool HideHeroImage = false);
+
+/// <summary>Range of the Contact/Hours white background's transparency (0 = solid white, 100 = see-through).</summary>
+public static class ContactHoursWhiteBackgroundDefaults
+{
+    public const int Transparency = 0;
+    public const int MinTransparency = 0;
+    public const int MaxTransparency = 100;
+}
 
 /// <summary>Default percentage positions of the two custom background glow circles ("circle at X% Y%").</summary>
 public static class CustomBackgroundDefaults

@@ -152,6 +152,9 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
                 .ToList(),
             AllowMenuPdfDownload: profile.AllowMenuPdfDownload,
             ShowTopContactSection: profile.ShowTopContactSection,
-            ShowBottomContactSection: profile.ShowBottomContactSection));
+            ShowBottomContactSection: profile.ShowBottomContactSection,
+            ContactHoursWhiteBackground: profile.ContactHoursWhiteBackground,
+            ContactHoursWhiteBackgroundTransparency: profile.ContactHoursWhiteBackgroundTransparency,
+            HideHeroImage: profile.HideHeroImage));
     }
 }

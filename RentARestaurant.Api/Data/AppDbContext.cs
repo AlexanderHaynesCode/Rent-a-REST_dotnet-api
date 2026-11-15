@@ -103,6 +103,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.AllowMenuPdfDownload).HasColumnName("allow_menu_pdf_download");
             entity.Property(x => x.ShowTopContactSection).HasColumnName("show_top_contact_section");
             entity.Property(x => x.ShowBottomContactSection).HasColumnName("show_bottom_contact_section");
+            entity.Property(x => x.ContactHoursWhiteBackground).HasColumnName("contact_hours_white_background");
+            entity.Property(x => x.ContactHoursWhiteBackgroundTransparency).HasColumnName("contact_hours_white_background_transparency");
+            entity.Property(x => x.HideHeroImage).HasColumnName("hide_hero_image");
             entity.Property(x => x.UpdatedUtc).HasColumnName("updated_utc");
             entity.HasOne(x => x.Tenant)
                 .WithOne(x => x.Profile)

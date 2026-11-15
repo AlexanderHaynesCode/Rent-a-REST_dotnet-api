@@ -179,6 +179,13 @@ public class AdminRestaurantController(
             return BadRequest("Custom background positions must be between 0 and 100 in steps of 10.");
         }
 
+        // Kept while the white background is off so re-enabling restores it.
+        if (trimmedRequest.ContactHoursWhiteBackgroundTransparency is < ContactHoursWhiteBackgroundDefaults.MinTransparency
+            or > ContactHoursWhiteBackgroundDefaults.MaxTransparency)
+        {
+            return BadRequest("Contact and Hours white background transparency must be between 0 and 100.");
+        }
+
         if (trimmedRequest.Address?.Length > 300)
         {
             return BadRequest("Address must be 300 characters or fewer.");
@@ -330,7 +337,12 @@ public class AdminRestaurantController(
         {
             return StatusCode(StatusCodes.Status500InternalServerError, new { Error = "Failed to upload image.", Details = ex.Message });
         }
-        
+
+        // Each image type is stored under one fixed R2 key, so a replacement would otherwise keep the
+        // same URL and browsers/the CDN would keep serving the cached old image. A per-upload version
+        // makes the stored URL change every time (the key stays fixed so delete still finds it).
+        url = WithUploadVersion(url);
+
         SetBrandingImageUrl(profile, normalizedImageType, url);
 
         profile.UpdatedUtc = DateTime.UtcNow;
@@ -681,6 +693,12 @@ public class AdminRestaurantController(
         imageType.Equals("hero", StringComparison.OrdinalIgnoreCase) ||
         imageType.Equals("primary-cta", StringComparison.OrdinalIgnoreCase) ||
         imageType.Equals("custom-background", StringComparison.OrdinalIgnoreCase);
+
+    private static string WithUploadVersion(string url)
+    {
+        var separator = url.Contains('?') ? '&' : '?';
+        return $"{url}{separator}v={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+    }
 
     private static void SetBrandingImageUrl(RestaurantProfile profile, string imageType, string? url)
     {

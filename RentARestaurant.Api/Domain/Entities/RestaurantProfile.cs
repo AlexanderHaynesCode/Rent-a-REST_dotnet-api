@@ -39,6 +39,9 @@ public class RestaurantProfile : ITenantEntity
     public bool AllowMenuPdfDownload { get; set; } = true;
     public bool ShowTopContactSection { get; set; }
     public bool ShowBottomContactSection { get; set; } = true;
+    public bool ContactHoursWhiteBackground { get; set; }
+    public int ContactHoursWhiteBackgroundTransparency { get; set; } = Contracts.ContactHoursWhiteBackgroundDefaults.Transparency;
+    public bool HideHeroImage { get; set; }
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 
     public Tenant Tenant { get; set; } = null!;
