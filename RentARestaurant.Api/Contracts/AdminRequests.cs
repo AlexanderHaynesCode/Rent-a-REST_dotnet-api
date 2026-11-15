@@ -23,7 +23,9 @@ public sealed record UpdateBrandingRequest(
     bool CustomBackgroundSplash1Active = true,
     bool CustomBackgroundSplash2Active = true,
     // The page background image URL itself is managed only by the images/custom-background endpoints.
-    bool CustomBackgroundImageActive = true);
+    bool CustomBackgroundImageActive = true,
+    bool ShowTopContactSection = false,
+    bool ShowBottomContactSection = true);
 
 /// <summary>Default percentage positions of the two custom background glow circles ("circle at X% Y%").</summary>
 public static class CustomBackgroundDefaults

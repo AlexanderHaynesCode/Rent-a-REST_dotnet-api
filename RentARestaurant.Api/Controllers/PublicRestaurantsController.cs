@@ -150,6 +150,8 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             Menus: menus
                 .Select(m => new PublicMenuResponse(m.Id, m.Name, m.Description, m.SortOrder, m.IsVisible))
                 .ToList(),
-            AllowMenuPdfDownload: profile.AllowMenuPdfDownload));
+            AllowMenuPdfDownload: profile.AllowMenuPdfDownload,
+            ShowTopContactSection: profile.ShowTopContactSection,
+            ShowBottomContactSection: profile.ShowBottomContactSection));
     }
 }

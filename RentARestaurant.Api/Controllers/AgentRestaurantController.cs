@@ -432,7 +432,9 @@ public class AgentRestaurantController(
             profile.CustomBackgroundMainColorActive,
             profile.CustomBackgroundSplash1Active,
             profile.CustomBackgroundSplash2Active,
-            profile.CustomBackgroundImageActive);
+            profile.CustomBackgroundImageActive,
+            ShowTopContactSection: profile.ShowTopContactSection,
+            ShowBottomContactSection: profile.ShowBottomContactSection);
 
         var updated = await restaurantAdminService.UpdateBrandingAsync(tenantId, merged, cancellationToken);
         if (updated)

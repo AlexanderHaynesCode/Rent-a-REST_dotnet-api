@@ -245,6 +245,8 @@ CREATE TABLE restaurant_profiles (
     custom_background_image_url TEXT,
     custom_background_image_active BOOLEAN NOT NULL DEFAULT TRUE,
     allow_menu_pdf_download BOOLEAN NOT NULL DEFAULT TRUE,
+    show_top_contact_section BOOLEAN NOT NULL DEFAULT FALSE,
+    show_bottom_contact_section BOOLEAN NOT NULL DEFAULT TRUE,
     updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -354,6 +356,14 @@ ADD COLUMN IF NOT EXISTS custom_background_image_active BOOLEAN NOT NULL DEFAULT
 
 ALTER TABLE restaurant_profiles
 ADD CONSTRAINT hex_color_format_custom_background_main CHECK (custom_background_main_hex_color IS NULL OR custom_background_main_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$');
+```
+
+**For existing databases, add the Contact section placement settings (the restaurant site's address/phone Contact section, set by the admin portal's "Show top-of-page Contact section" and "Show bottom-of-page Contact section" checkboxes on the Branding page). The top section sits after the top-of-page hours section and before the menu; the bottom section is the last section on the page. Tenants can show either, both, or neither. `show_top_contact_section` defaults to FALSE and `show_bottom_contact_section` defaults to TRUE, so existing sites keep their single Contact section at the bottom. Either section still only appears while the tenant has an address or phone number. Run this before deploying the API, since EF selects both columns:**
+
+```sql
+ALTER TABLE restaurant_profiles
+ADD COLUMN IF NOT EXISTS show_top_contact_section BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS show_bottom_contact_section BOOLEAN NOT NULL DEFAULT TRUE;
 ```
 
 ---

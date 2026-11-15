@@ -37,7 +37,9 @@ public sealed record PublicRestaurantResponse(
     string TopHoursOpenStatusDetail = TopHoursOptions.NoDetail,
     IReadOnlyList<DailyHourResponse>? DailyHours = null,
     IReadOnlyList<PublicMenuResponse>? Menus = null,
-    bool AllowMenuPdfDownload = true);
+    bool AllowMenuPdfDownload = true,
+    bool ShowTopContactSection = false,
+    bool ShowBottomContactSection = true);
 
 /// <summary>
 /// The public storefront response only includes visible menus; the admin/agent snapshot includes all

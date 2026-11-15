@@ -37,6 +37,8 @@ public class RestaurantProfile : ITenantEntity
     public string? CustomBackgroundImageUrl { get; set; }
     public bool CustomBackgroundImageActive { get; set; } = true;
     public bool AllowMenuPdfDownload { get; set; } = true;
+    public bool ShowTopContactSection { get; set; }
+    public bool ShowBottomContactSection { get; set; } = true;
     public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 
     public Tenant Tenant { get; set; } = null!;

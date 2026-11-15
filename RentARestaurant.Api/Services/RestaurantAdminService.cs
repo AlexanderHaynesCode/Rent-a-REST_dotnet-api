@@ -195,7 +195,9 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 Menus: menus
                     .Select(m => new PublicMenuResponse(m.Id, m.Name, m.Description, m.SortOrder, m.IsVisible))
                     .ToList(),
-                AllowMenuPdfDownload: profile.AllowMenuPdfDownload);
+                AllowMenuPdfDownload: profile.AllowMenuPdfDownload,
+                ShowTopContactSection: profile.ShowTopContactSection,
+                ShowBottomContactSection: profile.ShowBottomContactSection);
     }
 
     public async Task<bool> UpdateBrandingAsync(Guid tenantId, UpdateBrandingRequest request, CancellationToken cancellationToken)
@@ -230,6 +232,8 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         profile.CustomBackgroundSplash1Active = request.CustomBackgroundSplash1Active;
         profile.CustomBackgroundSplash2Active = request.CustomBackgroundSplash2Active;
         profile.CustomBackgroundImageActive = request.CustomBackgroundImageActive;
+        profile.ShowTopContactSection = request.ShowTopContactSection;
+        profile.ShowBottomContactSection = request.ShowBottomContactSection;
         profile.UpdatedUtc = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
