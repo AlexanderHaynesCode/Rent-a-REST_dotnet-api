@@ -906,5 +906,6 @@ ALTER TABLE agent_submissions ADD COLUMN IF NOT EXISTS clarification_context TEX
 ```
 
 `clarification_context` holds JSON written by agent-intake-service while a submission is `NeedsClarification`
-for a logo/hero image question: the attachments it staged in R2 (`filename`, `contentType`, `url`), the slots
+for a logo/hero/page background image question (including `backgroundFile`, the file an unqualified "background" request
+refers to while the tenant is asked whether they mean the hero image or the page background image): the attachments it staged in R2 (`filename`, `contentType`, `url`), the slots
 already resolved (`resolvedSlots`) and the slots still being asked about (`pendingSlots`).

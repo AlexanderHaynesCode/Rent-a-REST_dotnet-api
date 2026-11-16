@@ -71,8 +71,16 @@ public interface IRestaurantAdminService
 
     Task<bool> DeleteMenuItemAsync(Guid tenantId, Guid itemId, CancellationToken cancellationToken);
 
-    /// <summary>Reconciles the current DB state back to a previously captured snapshot (used for agent-change rollback).</summary>
-    Task RestoreSnapshotAsync(Guid tenantId, PublicRestaurantResponse snapshot, CancellationToken cancellationToken);
+    /// <summary>Sets the page background image URL, which branding updates never touch. Null removes it.</summary>
+    Task<bool> SetCustomBackgroundImageUrlAsync(Guid tenantId, string? url, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reconciles the current DB state back to a previously captured snapshot (used for agent-change rollback).
+    /// <paramref name="presentKeys"/> holds the top-level property names found in the stored snapshot JSON
+    /// (compared ignoring case): a setting added after the snapshot was taken is missing from it and is left
+    /// as is, instead of being reset to its default. Null means every property is present.
+    /// </summary>
+    Task RestoreSnapshotAsync(Guid tenantId, PublicRestaurantResponse snapshot, IReadOnlySet<string>? presentKeys, CancellationToken cancellationToken);
 }
 
 public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminService
@@ -681,8 +689,29 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         return true;
     }
 
-    public async Task RestoreSnapshotAsync(Guid tenantId, PublicRestaurantResponse snapshot, CancellationToken cancellationToken)
+    public async Task<bool> SetCustomBackgroundImageUrlAsync(Guid tenantId, string? url, CancellationToken cancellationToken)
     {
+        var profile = await dbContext.RestaurantProfiles
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
+
+        if (profile is null)
+        {
+            return false;
+        }
+
+        profile.CustomBackgroundImageUrl = url;
+        profile.UpdatedUtc = DateTime.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task RestoreSnapshotAsync(Guid tenantId, PublicRestaurantResponse snapshot, IReadOnlySet<string>? presentKeys, CancellationToken cancellationToken)
+    {
+        // A snapshot stored before a setting existed has no key for it; deserializing fills in the
+        // default, which must not overwrite whatever the tenant has set since.
+        bool Has(string propertyName) => presentKeys is null || presentKeys.Contains(propertyName);
+
         var profile = await dbContext.RestaurantProfiles
             .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
 
@@ -698,6 +727,36 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             profile.PrimaryCtaUrl = snapshot.PrimaryCtaUrl;
             profile.Address = snapshot.Address;
             profile.PhoneNumber = snapshot.PhoneNumber;
+
+            if (Has(nameof(snapshot.UseLegacyHoursStyle))) profile.UseLegacyHoursStyle = snapshot.UseLegacyHoursStyle;
+            if (Has(nameof(snapshot.ShowTopHoursSection))) profile.ShowTopHoursSection = snapshot.ShowTopHoursSection;
+            if (Has(nameof(snapshot.TopHoursStyle))) profile.TopHoursStyle = snapshot.TopHoursStyle;
+            if (Has(nameof(snapshot.TopHoursOpenStatusDetail))) profile.TopHoursOpenStatusDetail = snapshot.TopHoursOpenStatusDetail;
+            if (Has(nameof(snapshot.ShowBottomHoursSection))) profile.ShowBottomHoursSection = snapshot.ShowBottomHoursSection;
+            if (Has(nameof(snapshot.UseLegacyBottomHoursStyle))) profile.UseLegacyBottomHoursStyle = snapshot.UseLegacyBottomHoursStyle;
+
+            if (Has(nameof(snapshot.ShowCustomBackground))) profile.ShowCustomBackground = snapshot.ShowCustomBackground;
+            if (Has(nameof(snapshot.CustomBackgroundHexColor1))) profile.CustomBackgroundHexColor1 = snapshot.CustomBackgroundHexColor1;
+            if (Has(nameof(snapshot.CustomBackgroundHexColor2))) profile.CustomBackgroundHexColor2 = snapshot.CustomBackgroundHexColor2;
+            if (Has(nameof(snapshot.CustomBackgroundPosition1X))) profile.CustomBackgroundPosition1X = snapshot.CustomBackgroundPosition1X;
+            if (Has(nameof(snapshot.CustomBackgroundPosition1Y))) profile.CustomBackgroundPosition1Y = snapshot.CustomBackgroundPosition1Y;
+            if (Has(nameof(snapshot.CustomBackgroundPosition2X))) profile.CustomBackgroundPosition2X = snapshot.CustomBackgroundPosition2X;
+            if (Has(nameof(snapshot.CustomBackgroundPosition2Y))) profile.CustomBackgroundPosition2Y = snapshot.CustomBackgroundPosition2Y;
+            if (Has(nameof(snapshot.CustomBackgroundMainHexColor))) profile.CustomBackgroundMainHexColor = snapshot.CustomBackgroundMainHexColor;
+            if (Has(nameof(snapshot.CustomBackgroundMainColorActive))) profile.CustomBackgroundMainColorActive = snapshot.CustomBackgroundMainColorActive;
+            if (Has(nameof(snapshot.CustomBackgroundSplash1Active))) profile.CustomBackgroundSplash1Active = snapshot.CustomBackgroundSplash1Active;
+            if (Has(nameof(snapshot.CustomBackgroundSplash2Active))) profile.CustomBackgroundSplash2Active = snapshot.CustomBackgroundSplash2Active;
+            if (Has(nameof(snapshot.CustomBackgroundImageUrl))) profile.CustomBackgroundImageUrl = snapshot.CustomBackgroundImageUrl;
+            if (Has(nameof(snapshot.CustomBackgroundImageActive))) profile.CustomBackgroundImageActive = snapshot.CustomBackgroundImageActive;
+
+            if (Has(nameof(snapshot.AllowMenuPdfDownload))) profile.AllowMenuPdfDownload = snapshot.AllowMenuPdfDownload;
+            if (Has(nameof(snapshot.ShowTopContactSection))) profile.ShowTopContactSection = snapshot.ShowTopContactSection;
+            if (Has(nameof(snapshot.ShowBottomContactSection))) profile.ShowBottomContactSection = snapshot.ShowBottomContactSection;
+            if (Has(nameof(snapshot.ContactHoursWhiteBackground))) profile.ContactHoursWhiteBackground = snapshot.ContactHoursWhiteBackground;
+            if (Has(nameof(snapshot.ContactHoursWhiteBackgroundTransparency))) profile.ContactHoursWhiteBackgroundTransparency = snapshot.ContactHoursWhiteBackgroundTransparency;
+            if (Has(nameof(snapshot.ApplyTransparencyToMenuItems))) profile.ApplyTransparencyToMenuItems = snapshot.ApplyTransparencyToMenuItems;
+            if (Has(nameof(snapshot.HideHeroImage))) profile.HideHeroImage = snapshot.HideHeroImage;
+
             profile.UpdatedUtc = DateTime.UtcNow;
         }
 
@@ -770,6 +829,10 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             }
         }
 
+        var existingMenus = await dbContext.Menus
+            .Where(x => x.TenantId == tenantId)
+            .ToListAsync(cancellationToken);
+
         var existingCategories = await dbContext.MenuCategories
             .Where(x => x.TenantId == tenantId)
             .ToListAsync(cancellationToken);
@@ -778,29 +841,113 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             .Where(x => x.TenantId == tenantId)
             .ToListAsync(cancellationToken);
 
-        // Snapshots taken before multiple menus existed carry no MenuId, and a menu may have been deleted
-        // since the snapshot - either way the category lands in the tenant's default menu.
-        var existingMenuIds = (await dbContext.Menus
-            .Where(x => x.TenantId == tenantId)
-            .Select(x => x.Id)
-            .ToListAsync(cancellationToken)).ToHashSet();
+        var snapshotMenus = Has(nameof(snapshot.Menus)) && snapshot.Menus is { Count: > 0 }
+            ? snapshot.Menus.OrderBy(m => m.SortOrder).ThenBy(m => m.Name).ToList()
+            : null;
+        var snapshotMenuIds = snapshotMenus?.Select(m => m.Id).ToHashSet();
+        var existingMenuIds = existingMenus.Select(m => m.Id).ToHashSet();
         Guid? defaultMenuId = null;
 
-        async Task<Guid> ResolveMenuIdAsync(Guid? snapshotMenuId) =>
-            snapshotMenuId is { } id && existingMenuIds.Contains(id)
-                ? id
-                : defaultMenuId ??= await GetOrCreateDefaultMenuIdAsync(tenantId, cancellationToken);
+        async Task<Guid?> ResolveMenuIdAsync(Guid? snapshotMenuId, bool categoryExists)
+        {
+            if (snapshotMenus is not null)
+            {
+                return snapshotMenuId is { } id && snapshotMenuIds!.Contains(id) ? id : snapshotMenus[0].Id;
+            }
+
+            if (snapshotMenuId is { } existingId && existingMenuIds.Contains(existingId))
+            {
+                return existingId;
+            }
+
+            // An existing category stays in the menu it is in; a re-created one needs some menu.
+            return categoryExists ? null : defaultMenuId ??= await GetOrCreateDefaultMenuIdAsync(tenantId, cancellationToken);
+        }
 
         var snapshotCategoryIds = snapshot.Menu.Select(c => c.Id).ToHashSet();
         var snapshotItemIds = snapshot.Menu.SelectMany(c => c.Items).Select(i => i.Id).ToHashSet();
 
-        // Anything created after the snapshot was taken (i.e. not present in it) gets removed,
-        // which correctly reverses agent-driven creates as part of the rollback.
+        var staleCategories = existingCategories.Where(c => !snapshotCategoryIds.Contains(c.Id)).ToList();
+        var staleMenus = snapshotMenus is null
+            ? new List<Menu>()
+            : existingMenus.Where(m => !snapshotMenuIds!.Contains(m.Id)).ToList();
+
+        // Step 1: remove items created after the snapshot, and move every menu/category that is about to be
+        // renamed, moved or deleted onto a placeholder name. Menu names are unique per tenant and category
+        // names per menu, so restoring names directly could collide (e.g. two menus that swapped names).
         dbContext.MenuItems.RemoveRange(existingItems.Where(i => !snapshotItemIds.Contains(i.Id)));
-        dbContext.MenuCategories.RemoveRange(existingCategories.Where(c => !snapshotCategoryIds.Contains(c.Id)));
+
+        static string PlaceholderName(Guid id) => $"__restore_{id:N}";
+
+        foreach (var menu in staleMenus)
+        {
+            menu.Name = PlaceholderName(menu.Id);
+        }
+
+        if (snapshotMenus is not null)
+        {
+            foreach (var menu in existingMenus)
+            {
+                var snapshotMenu = snapshotMenus.FirstOrDefault(m => m.Id == menu.Id);
+                if (snapshotMenu is not null && snapshotMenu.Name != menu.Name)
+                {
+                    menu.Name = PlaceholderName(menu.Id);
+                }
+            }
+        }
+
+        foreach (var category in staleCategories)
+        {
+            category.Name = PlaceholderName(category.Id);
+        }
+
+        var targetMenuIdByCategory = new Dictionary<Guid, Guid?>();
+        foreach (var category in snapshot.Menu)
+        {
+            var existing = existingCategories.FirstOrDefault(c => c.Id == category.Id);
+            var targetMenuId = await ResolveMenuIdAsync(category.MenuId, existing is not null);
+            targetMenuIdByCategory[category.Id] = targetMenuId;
+
+            if (existing is not null &&
+                (existing.Name != category.Name || (targetMenuId is { } menuId && menuId != existing.MenuId)))
+            {
+                existing.Name = PlaceholderName(existing.Id);
+            }
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        // Step 2: bring back the snapshot's menus, categories and items.
+        if (snapshotMenus is not null)
+        {
+            foreach (var menu in snapshotMenus)
+            {
+                var target = existingMenus.FirstOrDefault(m => m.Id == menu.Id);
+                if (target is null)
+                {
+                    dbContext.Menus.Add(new Menu
+                    {
+                        Id = menu.Id,
+                        TenantId = tenantId,
+                        Name = menu.Name,
+                        Description = menu.Description ?? string.Empty,
+                        SortOrder = menu.SortOrder,
+                        IsVisible = menu.IsVisible
+                    });
+                }
+                else
+                {
+                    target.Name = menu.Name;
+                    target.Description = menu.Description ?? string.Empty;
+                    target.SortOrder = menu.SortOrder;
+                    target.IsVisible = menu.IsVisible;
+                }
+            }
+        }
 
         foreach (var category in snapshot.Menu)
         {
+            var targetMenuId = targetMenuIdByCategory[category.Id];
             var targetCategory = existingCategories.FirstOrDefault(c => c.Id == category.Id);
             if (targetCategory is null)
             {
@@ -808,7 +955,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 {
                     Id = category.Id,
                     TenantId = tenantId,
-                    MenuId = await ResolveMenuIdAsync(category.MenuId),
+                    MenuId = targetMenuId!.Value,
                     Name = category.Name,
                     Description = category.Description,
                     SortOrder = category.SortOrder
@@ -816,9 +963,9 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             }
             else
             {
-                if (category.MenuId is { } snapshotMenuId && existingMenuIds.Contains(snapshotMenuId))
+                if (targetMenuId is { } menuId)
                 {
-                    targetCategory.MenuId = snapshotMenuId;
+                    targetCategory.MenuId = menuId;
                 }
 
                 targetCategory.Name = category.Name;
@@ -854,6 +1001,13 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 }
             }
         }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        // Step 3: only now remove what was created after the snapshot. Every surviving item and category has
+        // been moved back first, so deleting a category or menu can't cascade onto something being restored.
+        dbContext.MenuCategories.RemoveRange(staleCategories);
+        dbContext.Menus.RemoveRange(staleMenus);
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }

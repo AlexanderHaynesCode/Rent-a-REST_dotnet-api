@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RentARestaurant.Api.Contracts;
 using RentARestaurant.Api.Data;
+using RentARestaurant.Api.Domain;
 using RentARestaurant.Api.Domain.Entities;
 using RentARestaurant.Api.Infrastructure.Email;
 using RentARestaurant.Api.Infrastructure.Storage;
@@ -64,27 +65,61 @@ public class AgentRestaurantController(
             return NotFound(new { Error = "Submission not found for this tenant." });
         }
 
-        var preChangeSnapshot = await restaurantAdminService.GetSnapshotAsync(tenantId, cancellationToken);
-        var appliedSummary = new List<string>();
-
-        var (activeDateHours, rejectedSummary, dateHoursError) = ValidateDateSpecificHours(request.ChangeSet.DateSpecificHoursChanges);
+        var changeSet = request.ChangeSet;
+        var (activeDateHours, rejectedSummary, dateHoursError) = ValidateDateSpecificHours(changeSet.DateSpecificHoursChanges);
         if (dateHoursError is not null)
         {
             return BadRequest(new { Error = dateHoursError });
         }
 
-        if (request.ChangeSet.BrandingChange is { } branding)
+        // Everything below commits together with the audit record: a failure part-way must not leave
+        // changes live that have no snapshot to roll back to.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var preChangeSnapshot = await restaurantAdminService.GetSnapshotAsync(tenantId, cancellationToken);
+        var appliedSummary = new List<string>();
+
+        // Branding, the hours sections' settings and the menu settings all live on the restaurant profile,
+        // so they are applied first and described together by comparing the profile before and after.
+        var profileChangeRequested = changeSet.BrandingChange is not null
+            || changeSet.HoursDisplayChange is not null
+            || changeSet.MenuSettingsChange is not null;
+        if (profileChangeRequested)
         {
-            await ApplyBrandingChangeAsync(tenantId, branding, cancellationToken, appliedSummary);
+            var profileBefore = await LoadProfileAsync(tenantId, cancellationToken);
+            if (profileBefore is not null)
+            {
+                var rejectedBefore = rejectedSummary.Count;
+
+                if (changeSet.BrandingChange is { } branding)
+                {
+                    await ApplyBrandingChangeAsync(tenantId, profileBefore, branding, rejectedSummary, cancellationToken);
+                }
+
+                if (changeSet.HoursDisplayChange is { } hoursDisplay)
+                {
+                    await ApplyHoursDisplayChangeAsync(tenantId, hoursDisplay, rejectedSummary, cancellationToken);
+                }
+
+                if (changeSet.MenuSettingsChange is { AllowMenuPdfDownload: { } allowMenuPdfDownload })
+                {
+                    await restaurantAdminService.SetMenuSettingsAsync(tenantId, allowMenuPdfDownload, cancellationToken);
+                }
+
+                var profileAfter = await LoadProfileAsync(tenantId, cancellationToken);
+                var profileLines = ProfileChangeSummary.Describe(profileBefore, profileAfter!);
+                appliedSummary.AddRange(profileLines);
+
+                if (profileLines.Count == 0 && rejectedSummary.Count == rejectedBefore)
+                {
+                    rejectedSummary.Add("The branding and display settings you asked for already match your site, so nothing was changed.");
+                }
+            }
         }
 
-        if (request.ChangeSet.HoursChanges is { Count: > 0 } hours)
+        if (changeSet.HoursChanges is { Count: > 0 } hours)
         {
-            var hourRequests = hours
-                .Select(h => new UpsertBusinessHourRequest(h.DayOfWeek, h.OpenTime, h.CloseTime, h.IsClosed))
-                .ToList();
-            await restaurantAdminService.UpsertHoursAsync(tenantId, hourRequests, cancellationToken);
-            appliedSummary.Add($"Updated business hours ({hours.Count} day(s)).");
+            await ApplyHoursChangesAsync(tenantId, hours, appliedSummary, rejectedSummary, cancellationToken);
         }
 
         if (activeDateHours is { Count: > 0 } dateHours)
@@ -109,38 +144,57 @@ public class AgentRestaurantController(
             foreach (var h in dateHours.Where(h => IsAction(h.Action, "delete")))
             {
                 var removed = await restaurantAdminService.DeleteDateSpecificHourAsync(tenantId, h.Date, cancellationToken);
-                appliedSummary.Add(removed
-                    ? $"Removed special hours for {h.Date:yyyy-MM-dd}."
-                    : $"No special hours existed for {h.Date:yyyy-MM-dd}; nothing removed.");
+                if (removed)
+                {
+                    appliedSummary.Add($"Removed special hours for {h.Date:yyyy-MM-dd}.");
+                }
+                else
+                {
+                    rejectedSummary.Add($"No special hours existed for {h.Date:MMMM d, yyyy}, so nothing was removed.");
+                }
             }
         }
 
-        // Categories created in this same change-set have no id until applied - items that
-        // reference one by name (instead of a real CategoryId) are resolved against this map.
-        var newCategoryIdsByName = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        // Menus and categories created in this same change-set have no id until applied - later changes
+        // that reference one by name (instead of a real id) are resolved against this context.
+        var menuContext = new MenuApplyContext();
 
-        if (request.ChangeSet.MenuCategoryChanges is { Count: > 0 } categoryChanges)
+        if (changeSet.MenuChanges is { Count: > 0 } menuChanges)
+        {
+            foreach (var change in menuChanges)
+            {
+                await ApplyMenuChangeAsync(tenantId, change, menuContext, appliedSummary, rejectedSummary, cancellationToken);
+            }
+        }
+
+        if (changeSet.MenuCategoryChanges is { Count: > 0 } categoryChanges)
         {
             foreach (var change in categoryChanges)
             {
-                await ApplyCategoryChangeAsync(tenantId, change, cancellationToken, appliedSummary, newCategoryIdsByName);
+                await ApplyCategoryChangeAsync(tenantId, change, menuContext, appliedSummary, rejectedSummary, cancellationToken);
             }
         }
 
-        if (request.ChangeSet.MenuItemChanges is { Count: > 0 } itemChanges)
+        if (changeSet.MenuItemChanges is { Count: > 0 } itemChanges)
         {
             foreach (var change in itemChanges)
             {
-                await ApplyItemChangeAsync(tenantId, change, cancellationToken, appliedSummary, newCategoryIdsByName);
+                await ApplyItemChangeAsync(tenantId, change, menuContext, appliedSummary, rejectedSummary, cancellationToken);
             }
         }
 
-        if (appliedSummary.Count == 0 && rejectedSummary.Count > 0)
+        if (appliedSummary.Count == 0)
         {
+            if (rejectedSummary.Count == 0)
+            {
+                rejectedSummary.Add("We couldn't find anything on your site to change from your request.");
+            }
+
             submission.Status = AgentSubmissionStatus.Rejected;
-            submission.RejectionReason = string.Join(" ", rejectedSummary);
+            submission.RejectionReason = Truncate(string.Join(" ", rejectedSummary), 1000);
             submission.UpdatedUtc = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
             var rejectedOwnerEmail = await GetOwnerEmailAsync(tenantId, cancellationToken);
             if (!string.IsNullOrWhiteSpace(rejectedOwnerEmail))
@@ -170,10 +224,11 @@ public class AgentRestaurantController(
         submission.UpdatedUtc = DateTime.UtcNow;
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         var ownerEmail = await GetOwnerEmailAsync(tenantId, cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(ownerEmail) && appliedSummary.Count > 0)
+        if (!string.IsNullOrWhiteSpace(ownerEmail))
         {
             await emailService.SendAgentChangesAppliedEmailAsync(
                 ownerEmail, tenant.Name, appliedSummary, rejectedSummary, audit.Id, rollbackExpiresUtc, cancellationToken);
@@ -272,9 +327,9 @@ public class AgentRestaurantController(
         CancellationToken cancellationToken)
     {
         var normalizedImageType = imageType.Trim().ToLowerInvariant();
-        if (normalizedImageType is not ("logo" or "hero" or "attachment"))
+        if (normalizedImageType is not ("logo" or "hero" or "custom-background" or "attachment"))
         {
-            return BadRequest(new { Error = "imageType must be one of: logo, hero, attachment." });
+            return BadRequest(new { Error = "imageType must be one of: logo, hero, custom-background, attachment." });
         }
 
         var tenantId = tenantContext.TenantId!.Value;
@@ -343,6 +398,27 @@ public class AgentRestaurantController(
     private static bool IsAction(string? value, string expected) =>
         string.Equals(value?.Trim(), expected, StringComparison.OrdinalIgnoreCase);
 
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string Truncate(string value, int maxLength) =>
+        value.Length <= maxLength ? value : value[..maxLength];
+
+    private static bool IsHttpUrl(string value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+
+    private Task<RestaurantProfile?> LoadProfileAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        dbContext.RestaurantProfiles
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
+
+    /// <summary>Names of menus and categories created earlier in the same change-set, for by-name references.</summary>
+    private sealed class MenuApplyContext
+    {
+        public Dictionary<string, Guid> NewMenuIdsByName { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<(string Name, Guid MenuId, Guid Id)> NewCategories { get; } = [];
+    }
+
     private static (List<AgentDateSpecificHoursChange> Active, List<string> Rejected, string? Error) ValidateDateSpecificHours(
         IReadOnlyList<AgentDateSpecificHoursChange>? changes)
     {
@@ -384,9 +460,11 @@ public class AgentRestaurantController(
                     return (active, rejected, $"Open time, close time and isClosed are required for {change.Date:yyyy-MM-dd}.");
                 }
 
-                if (change.OpenTime >= change.CloseTime)
+                // A closing time earlier than the opening time means the hours run past midnight.
+                if (!BusinessHourRules.AreTimesValid(change.OpenTime.Value, change.CloseTime.Value, isClosed: false))
                 {
-                    return (active, rejected, $"Open time must be before close time for {change.Date:yyyy-MM-dd}.");
+                    rejected.Add($"Hours for {change.Date:MMMM d, yyyy} were not changed. {BusinessHourRules.InvalidTimesMessage($"{change.Date:MMMM d}")}");
+                    continue;
                 }
             }
 
@@ -396,211 +474,669 @@ public class AgentRestaurantController(
         return (active, rejected, null);
     }
 
+    private async Task ApplyHoursChangesAsync(
+        Guid tenantId,
+        IReadOnlyList<AgentHoursChange> hours,
+        List<string> summary,
+        List<string> rejected,
+        CancellationToken cancellationToken)
+    {
+        var existing = await dbContext.BusinessHours
+            .AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.Date == null)
+            .ToListAsync(cancellationToken);
+
+        var requests = new List<UpsertBusinessHourRequest>();
+        foreach (var hour in hours)
+        {
+            // A closed day keeps whatever times are stored, the same as unchecking "Closed" in the admin portal expects.
+            var stored = existing.FirstOrDefault(x => x.DayOfWeek == hour.DayOfWeek);
+            var openTime = hour.OpenTime ?? stored?.OpenTime;
+            var closeTime = hour.CloseTime ?? stored?.CloseTime;
+
+            if (!hour.IsClosed && (hour.OpenTime is null || hour.CloseTime is null))
+            {
+                rejected.Add($"Hours for {hour.DayOfWeek} were not changed because both an opening and a closing time are needed.");
+                continue;
+            }
+
+            if (!BusinessHourRules.AreTimesValid(openTime ?? default, closeTime ?? default, hour.IsClosed))
+            {
+                rejected.Add($"Hours for {hour.DayOfWeek} were not changed. {BusinessHourRules.InvalidTimesMessage(hour.DayOfWeek.ToString())}");
+                continue;
+            }
+
+            requests.Add(new UpsertBusinessHourRequest(hour.DayOfWeek, openTime ?? default, closeTime ?? default, hour.IsClosed));
+        }
+
+        if (requests.Count > 0)
+        {
+            await restaurantAdminService.UpsertHoursAsync(tenantId, requests, cancellationToken);
+            summary.Add($"Updated business hours ({requests.Count} day(s)).");
+        }
+    }
+
     private async Task ApplyBrandingChangeAsync(
         Guid tenantId,
+        RestaurantProfile profile,
         AgentBrandingChange branding,
-        CancellationToken cancellationToken,
-        List<string> summary)
+        List<string> rejected,
+        CancellationToken cancellationToken)
     {
-        var profile = await dbContext.RestaurantProfiles
-            .AsNoTracking()
-            .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
+        // Image URLs: null leaves the image as is, blank removes it, anything else must be an http(s) URL.
+        string? MergeImageUrl(string? requested, string? current, string label, ref bool invalid)
+        {
+            if (requested is null) return current;
+            var trimmed = requested.Trim();
+            if (trimmed.Length == 0) return null;
+            if (IsHttpUrl(trimmed)) return trimmed;
+            rejected.Add($"Your {label} was not changed because we couldn't find the image for it.");
+            invalid = true;
+            return current;
+        }
+
+        var invalidImage = false;
+        var logoUrl = MergeImageUrl(branding.LogoUrl, profile.LogoUrl, "logo", ref invalidImage);
+        var heroImageUrl = MergeImageUrl(branding.HeroImageUrl, profile.HeroImageUrl, "hero image", ref invalidImage);
+        var backgroundImageUrl = MergeImageUrl(
+            branding.CustomBackgroundImageUrl, profile.CustomBackgroundImageUrl, "page background image", ref invalidImage);
+        var heroImageSet = heroImageUrl is not null && heroImageUrl != profile.HeroImageUrl;
+        var backgroundImageSet = backgroundImageUrl is not null && backgroundImageUrl != profile.CustomBackgroundImageUrl;
+
+        var mainColor = NullIfBlank(branding.CustomBackgroundMainHexColor);
+        var splashColor1 = NullIfBlank(branding.CustomBackgroundHexColor1);
+        var splashColor2 = NullIfBlank(branding.CustomBackgroundHexColor2);
+        var splash1Moved = branding.CustomBackgroundPosition1X is not null || branding.CustomBackgroundPosition1Y is not null;
+        var splash2Moved = branding.CustomBackgroundPosition2X is not null || branding.CustomBackgroundPosition2Y is not null;
+
+        // Settings implied by the request, so a change is never invisible: a new image or color switches its
+        // layer (and the custom background) on, a transparency setting switches the white background on, and
+        // a new hero image un-hides the hero. An explicit value from the tenant always wins.
+        var mainColorActive = branding.CustomBackgroundMainColorActive ?? (mainColor is not null || profile.CustomBackgroundMainColorActive);
+        var splash1Active = branding.CustomBackgroundSplash1Active ?? (splashColor1 is not null || splash1Moved || profile.CustomBackgroundSplash1Active);
+        var splash2Active = branding.CustomBackgroundSplash2Active ?? (splashColor2 is not null || splash2Moved || profile.CustomBackgroundSplash2Active);
+        var imageActive = branding.CustomBackgroundImageActive ?? (backgroundImageSet || profile.CustomBackgroundImageActive);
+
+        var backgroundLayerTouched = mainColor is not null || splashColor1 is not null || splashColor2 is not null
+            || splash1Moved || splash2Moved || backgroundImageSet
+            || branding.CustomBackgroundMainColorActive == true || branding.CustomBackgroundSplash1Active == true
+            || branding.CustomBackgroundSplash2Active == true || branding.CustomBackgroundImageActive == true;
+        var showCustomBackground = branding.ShowCustomBackground ?? (backgroundLayerTouched || profile.ShowCustomBackground);
+
+        var mergedSplashColor1 = splashColor1 ?? profile.CustomBackgroundHexColor1;
+        var mergedSplashColor2 = splashColor2 ?? profile.CustomBackgroundHexColor2;
+        if (showCustomBackground)
+        {
+            // An active splash needs a color; one that never had a color is left off instead.
+            if (splash1Active && mergedSplashColor1 is null)
+            {
+                splash1Active = false;
+                if (branding.CustomBackgroundSplash1Active == true)
+                    rejected.Add("Background splash color 1 was left off because no color has been chosen for it yet.");
+            }
+
+            if (splash2Active && mergedSplashColor2 is null)
+            {
+                splash2Active = false;
+                if (branding.CustomBackgroundSplash2Active == true)
+                    rejected.Add("Background splash color 2 was left off because no color has been chosen for it yet.");
+            }
+        }
+
+        var whiteBackground = branding.ContactHoursWhiteBackground
+            ?? (branding.ContactHoursWhiteBackgroundTransparency is not null
+                || branding.ApplyTransparencyToMenuItems == true
+                || profile.ContactHoursWhiteBackground);
+
+        var merged = new UpdateBrandingRequest(
+            NullIfBlank(branding.DisplayName) ?? profile.DisplayName,
+            branding.Tagline?.Trim() ?? profile.Tagline,
+            branding.Announcement?.Trim() ?? profile.Announcement,
+            NullIfBlank(branding.PrimaryHexColor) ?? profile.PrimaryHexColor,
+            NullIfBlank(branding.SecondaryHexColor) ?? profile.SecondaryHexColor,
+            logoUrl,
+            heroImageUrl,
+            branding.PrimaryCtaUrl?.Trim() ?? profile.PrimaryCtaUrl,
+            branding.Address is null ? profile.Address : NullIfBlank(branding.Address),
+            branding.PhoneNumber is null ? profile.PhoneNumber : NullIfBlank(branding.PhoneNumber),
+            showCustomBackground,
+            mergedSplashColor1,
+            mergedSplashColor2,
+            branding.CustomBackgroundPosition1X ?? profile.CustomBackgroundPosition1X,
+            branding.CustomBackgroundPosition1Y ?? profile.CustomBackgroundPosition1Y,
+            branding.CustomBackgroundPosition2X ?? profile.CustomBackgroundPosition2X,
+            branding.CustomBackgroundPosition2Y ?? profile.CustomBackgroundPosition2Y,
+            mainColor ?? profile.CustomBackgroundMainHexColor,
+            mainColorActive,
+            splash1Active,
+            splash2Active,
+            imageActive,
+            ShowTopContactSection: branding.ShowTopContactSection ?? profile.ShowTopContactSection,
+            ShowBottomContactSection: branding.ShowBottomContactSection ?? profile.ShowBottomContactSection,
+            ContactHoursWhiteBackground: whiteBackground,
+            ContactHoursWhiteBackgroundTransparency: branding.ContactHoursWhiteBackgroundTransparency ?? profile.ContactHoursWhiteBackgroundTransparency,
+            ApplyTransparencyToMenuItems: branding.ApplyTransparencyToMenuItems ?? profile.ApplyTransparencyToMenuItems,
+            HideHeroImage: branding.HideHeroImage ?? (!heroImageSet && profile.HideHeroImage));
+
+        string? error = null;
+        if (!BrandingRules.IsHexColor(merged.PrimaryHexColor) || !BrandingRules.IsHexColor(merged.SecondaryHexColor))
+        {
+            error = "Primary and secondary colors must be hex colors like #1A2B3C.";
+        }
+        else if (merged.DisplayName.Length > 200)
+        {
+            error = "Display name must be 200 characters or fewer.";
+        }
+        else if (merged.Tagline.Length > 300 || merged.Announcement.Length > 300)
+        {
+            error = "Tagline and announcement must be 300 characters or fewer.";
+        }
+
+        error ??= BrandingRules.Validate(merged);
+        if (error is not null)
+        {
+            rejected.Add($"Your branding changes were not applied. {error}");
+            return;
+        }
+
+        await restaurantAdminService.UpdateBrandingAsync(tenantId, merged, cancellationToken);
+
+        // The page background image URL is not part of a branding update (the admin portal sets it on upload).
+        if (backgroundImageUrl != profile.CustomBackgroundImageUrl)
+        {
+            await restaurantAdminService.SetCustomBackgroundImageUrlAsync(tenantId, backgroundImageUrl, cancellationToken);
+        }
+    }
+
+    private async Task ApplyHoursDisplayChangeAsync(
+        Guid tenantId,
+        AgentHoursDisplayChange change,
+        List<string> rejected,
+        CancellationToken cancellationToken)
+    {
+        var profile = await LoadProfileAsync(tenantId, cancellationToken);
         if (profile is null)
         {
             return;
         }
 
-        var merged = new UpdateBrandingRequest(
-            branding.DisplayName ?? profile.DisplayName,
-            branding.Tagline ?? profile.Tagline,
-            branding.Announcement ?? profile.Announcement,
-            branding.PrimaryHexColor ?? profile.PrimaryHexColor,
-            branding.SecondaryHexColor ?? profile.SecondaryHexColor,
-            branding.LogoUrl ?? profile.LogoUrl,
-            branding.HeroImageUrl ?? profile.HeroImageUrl,
-            branding.PrimaryCtaUrl ?? profile.PrimaryCtaUrl,
-            branding.Address ?? profile.Address,
-            branding.PhoneNumber ?? profile.PhoneNumber,
-            profile.ShowCustomBackground,
-            profile.CustomBackgroundHexColor1,
-            profile.CustomBackgroundHexColor2,
-            profile.CustomBackgroundPosition1X,
-            profile.CustomBackgroundPosition1Y,
-            profile.CustomBackgroundPosition2X,
-            profile.CustomBackgroundPosition2Y,
-            profile.CustomBackgroundMainHexColor,
-            profile.CustomBackgroundMainColorActive,
-            profile.CustomBackgroundSplash1Active,
-            profile.CustomBackgroundSplash2Active,
-            profile.CustomBackgroundImageActive,
-            ShowTopContactSection: profile.ShowTopContactSection,
-            ShowBottomContactSection: profile.ShowBottomContactSection,
-            ContactHoursWhiteBackground: profile.ContactHoursWhiteBackground,
-            ContactHoursWhiteBackgroundTransparency: profile.ContactHoursWhiteBackgroundTransparency,
-            ApplyTransparencyToMenuItems: profile.ApplyTransparencyToMenuItems,
-            HideHeroImage: profile.HideHeroImage);
-
-        var updated = await restaurantAdminService.UpdateBrandingAsync(tenantId, merged, cancellationToken);
-        if (updated)
+        var style = NullIfBlank(change.TopHoursStyle)?.ToLowerInvariant();
+        var detail = NullIfBlank(change.TopHoursOpenStatusDetail)?.ToLowerInvariant();
+        if ((style is not null && !TopHoursOptions.Styles.Contains(style)) ||
+            (detail is not null && !TopHoursOptions.OpenStatusDetails.Contains(detail)))
         {
-            summary.Add("Updated branding/profile information.");
+            rejected.Add("Your hours section settings were not changed because we couldn't tell which hours style you wanted.");
+            return;
+        }
+
+        if (change.ShowTopHoursSection is not null || style is not null || detail is not null || change.UseLegacyHoursStyle is not null)
+        {
+            // Picking a style for the top section implies showing it, and the sub-options imply their style,
+            // mirroring how the admin portal nests these options.
+            var showsHoursDetail = detail is not null && detail != TopHoursOptions.NoDetail;
+            var mergedStyle = style
+                ?? (showsHoursDetail ? TopHoursOptions.OpenStatusStyle
+                    : change.UseLegacyHoursStyle == true ? TopHoursOptions.StandardStyle
+                    : profile.TopHoursStyle);
+            var show = change.ShowTopHoursSection
+                ?? (style is not null || showsHoursDetail || change.UseLegacyHoursStyle == true || profile.ShowTopHoursSection);
+
+            await restaurantAdminService.SetTopHoursSectionAsync(
+                tenantId,
+                new SetTopHoursSectionRequest(
+                    show,
+                    mergedStyle,
+                    detail ?? profile.TopHoursOpenStatusDetail,
+                    change.UseLegacyHoursStyle ?? profile.UseLegacyHoursStyle),
+                cancellationToken);
+        }
+
+        if (change.ShowBottomHoursSection is not null || change.UseLegacyBottomHoursStyle is not null)
+        {
+            await restaurantAdminService.SetBottomHoursSectionAsync(
+                tenantId,
+                change.ShowBottomHoursSection ?? (change.UseLegacyBottomHoursStyle == true || profile.ShowBottomHoursSection),
+                change.UseLegacyBottomHoursStyle ?? profile.UseLegacyBottomHoursStyle,
+                cancellationToken);
+        }
+    }
+
+    /// <summary>An explicit id wins; otherwise the name is matched against menus created in this change-set, then existing ones.</summary>
+    private async Task<Guid?> ResolveMenuIdAsync(
+        Guid tenantId,
+        Guid? menuId,
+        string? menuName,
+        MenuApplyContext context,
+        CancellationToken cancellationToken)
+    {
+        if (menuId is not null)
+        {
+            return menuId;
+        }
+
+        var name = NullIfBlank(menuName);
+        if (name is null)
+        {
+            return null;
+        }
+
+        if (context.NewMenuIdsByName.TryGetValue(name, out var newMenuId))
+        {
+            return newMenuId;
+        }
+
+        var menus = await dbContext.Menus.AsNoTracking()
+            .Where(x => x.TenantId == tenantId)
+            .Select(x => new { x.Id, x.Name })
+            .ToListAsync(cancellationToken);
+        var matches = menus.Where(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase)).ToList();
+        return matches.Count == 1 ? matches[0].Id : null;
+    }
+
+    private async Task ApplyMenuChangeAsync(
+        Guid tenantId,
+        AgentMenuChange change,
+        MenuApplyContext context,
+        List<string> summary,
+        List<string> rejected,
+        CancellationToken cancellationToken)
+    {
+        if (!Enum.TryParse<AgentItemAction>(change.Action, ignoreCase: true, out var action))
+        {
+            rejected.Add($"Skipped a menu change with unknown action '{change.Action}'.");
+            return;
+        }
+
+        var name = NullIfBlank(change.Name);
+        var description = change.Description?.Trim();
+        if (name?.Length > MenuLimits.MaxNameLength)
+        {
+            rejected.Add($"Skipped the menu '{name}' - menu names must be {MenuLimits.MaxNameLength} characters or fewer.");
+            return;
+        }
+
+        if (description?.Length > MenuLimits.MaxDescriptionLength)
+        {
+            rejected.Add($"Skipped a menu change because its description exceeds {MenuLimits.MaxDescriptionLength} characters.");
+            return;
+        }
+
+        if (action == AgentItemAction.Create)
+        {
+            if (name is null)
+            {
+                rejected.Add("Skipped creating a menu because it has no name.");
+                return;
+            }
+
+            var created = await restaurantAdminService.CreateMenuAsync(
+                tenantId,
+                new CreateMenuRequest(name, change.SortOrder ?? 0, description, change.IsVisible ?? true),
+                cancellationToken);
+            switch (created.Status)
+            {
+                case MenuMutationStatus.Success:
+                    context.NewMenuIdsByName[name] = created.Id!.Value;
+                    summary.Add(change.IsVisible == false
+                        ? $"Created the menu '{name}' (hidden from your site)."
+                        : $"Created the menu '{name}'.");
+                    break;
+                case MenuMutationStatus.LimitReached:
+                    rejected.Add($"Skipped creating the menu '{name}' - the {MenuLimits.MaxMenusPerTenant}-menu limit was reached.");
+                    break;
+                case MenuMutationStatus.DuplicateName:
+                    // Later changes in this request may still refer to the menu by name.
+                    rejected.Add($"Skipped creating the menu '{name}' - a menu with that name already exists.");
+                    break;
+            }
+
+            return;
+        }
+
+        var current = change.MenuId is { } menuId
+            ? await dbContext.Menus.AsNoTracking().SingleOrDefaultAsync(x => x.Id == menuId && x.TenantId == tenantId, cancellationToken)
+            : null;
+        if (current is null)
+        {
+            rejected.Add($"Skipped a change to the menu '{name ?? "unknown"}' because that menu could not be found.");
+            return;
+        }
+
+        if (action == AgentItemAction.Update)
+        {
+            var merged = new UpdateMenuRequest(
+                name ?? current.Name,
+                description ?? current.Description,
+                change.SortOrder ?? current.SortOrder,
+                change.IsVisible ?? current.IsVisible);
+            var updated = await restaurantAdminService.UpdateMenuAsync(tenantId, current.Id, merged, cancellationToken);
+            if (updated.Status == MenuMutationStatus.DuplicateName)
+            {
+                rejected.Add($"Skipped renaming the menu '{current.Name}' to '{merged.Name}' - a menu with that name already exists.");
+                return;
+            }
+
+            if (updated.Status != MenuMutationStatus.Success)
+            {
+                rejected.Add($"The menu '{current.Name}' could not be updated.");
+                return;
+            }
+
+            var lines = new List<string>();
+            if (merged.Name != current.Name) lines.Add($"Renamed the menu '{current.Name}' to '{merged.Name}'.");
+            if (merged.IsVisible != current.IsVisible)
+            {
+                lines.Add(merged.IsVisible
+                    ? $"Made the menu '{merged.Name}' visible on your site."
+                    : $"Hid the menu '{merged.Name}' from your site.");
+            }
+
+            if (merged.Description != current.Description || merged.SortOrder != current.SortOrder || lines.Count == 0)
+            {
+                lines.Add($"Updated the menu '{merged.Name}'.");
+            }
+
+            summary.AddRange(lines);
+            return;
+        }
+
+        // Deleting a menu deletes its categories and items, so it only happens once the tenant confirmed it.
+        if (change.DeleteConfirmed != true)
+        {
+            rejected.Add($"The menu '{current.Name}' was not deleted because the deletion was not confirmed.");
+            return;
+        }
+
+        var categoryIds = await dbContext.MenuCategories.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.MenuId == current.Id)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+        var itemCount = await dbContext.MenuItems.AsNoTracking()
+            .CountAsync(x => x.TenantId == tenantId && categoryIds.Contains(x.CategoryId), cancellationToken);
+
+        var deleted = await restaurantAdminService.DeleteMenuAsync(tenantId, current.Id, cancellationToken);
+        if (deleted.Status == MenuMutationStatus.Success)
+        {
+            summary.Add($"Deleted the menu '{current.Name}' along with its {categoryIds.Count} category(ies) and {itemCount} item(s).");
+        }
+        else if (deleted.Status == MenuMutationStatus.LastMenu)
+        {
+            rejected.Add($"The menu '{current.Name}' was not deleted because your site needs at least one menu.");
+        }
+        else
+        {
+            rejected.Add($"The menu '{current.Name}' could not be deleted.");
         }
     }
 
     private async Task ApplyCategoryChangeAsync(
         Guid tenantId,
         AgentMenuCategoryChange change,
-        CancellationToken cancellationToken,
+        MenuApplyContext context,
         List<string> summary,
-        Dictionary<string, Guid> newCategoryIdsByName)
+        List<string> rejected,
+        CancellationToken cancellationToken)
     {
         if (!Enum.TryParse<AgentItemAction>(change.Action, ignoreCase: true, out var action))
         {
-            summary.Add($"Skipped menu category change with unknown action '{change.Action}'.");
+            rejected.Add($"Skipped menu category change with unknown action '{change.Action}'.");
             return;
         }
 
         var description = change.Description?.Trim();
-        if (description?.Length > 300)
+        if (description?.Length > MenuLimits.MaxDescriptionLength)
         {
-            summary.Add("Skipped menu category change because its description exceeds 300 characters.");
+            rejected.Add($"Skipped menu category change because its description exceeds {MenuLimits.MaxDescriptionLength} characters.");
+            return;
+        }
+
+        var requestedName = NullIfBlank(change.Name);
+        if (requestedName?.Length > MenuLimits.MaxNameLength)
+        {
+            rejected.Add($"Skipped the menu category '{requestedName}' - category names must be {MenuLimits.MaxNameLength} characters or fewer.");
+            return;
+        }
+
+        // Null means "the default menu" for a create and "stay in the current menu" for an update.
+        var targetMenuId = await ResolveMenuIdAsync(tenantId, change.MenuId, change.MenuName, context, cancellationToken);
+        if (targetMenuId is null && NullIfBlank(change.MenuName) is { } unknownMenuName && action != AgentItemAction.Delete)
+        {
+            rejected.Add($"Skipped the menu category '{requestedName ?? "unknown"}' - the menu '{unknownMenuName}' could not be found.");
             return;
         }
 
         switch (action)
         {
             case AgentItemAction.Create:
-                var name = change.Name ?? "New Category";
-                // No MenuId: agent-created categories go into the tenant's default (first) menu.
+                var name = requestedName ?? "New Category";
                 var created = await restaurantAdminService.CreateMenuCategoryAsync(
-                    tenantId, new CreateMenuCategoryRequest(name, change.SortOrder ?? 0, description), cancellationToken);
+                    tenantId, new CreateMenuCategoryRequest(name, change.SortOrder ?? 0, description, targetMenuId), cancellationToken);
                 switch (created.Status)
                 {
                     case MenuMutationStatus.Success:
-                        newCategoryIdsByName[name] = created.Id!.Value;
+                        var createdMenuId = await dbContext.MenuCategories.AsNoTracking()
+                            .Where(x => x.Id == created.Id!.Value)
+                            .Select(x => x.MenuId)
+                            .SingleAsync(cancellationToken);
+                        context.NewCategories.Add((name, createdMenuId, created.Id!.Value));
                         summary.Add($"Created menu category '{name}'.");
                         break;
                     case MenuMutationStatus.LimitReached:
-                        summary.Add($"Skipped creating menu category '{name}' - the {MenuLimits.MaxCategoriesPerTenant}-category limit was reached.");
+                        rejected.Add($"Skipped creating menu category '{name}' - the {MenuLimits.MaxCategoriesPerTenant}-category limit was reached.");
                         break;
                     case MenuMutationStatus.DuplicateName:
-                        summary.Add($"Skipped creating menu category '{name}' - a category with that name already exists.");
+                        rejected.Add($"Skipped creating menu category '{name}' - that menu already has a category with that name.");
+                        break;
+                    case MenuMutationStatus.MenuInvalid:
+                        rejected.Add($"Skipped creating menu category '{name}' - its menu could not be found.");
                         break;
                 }
                 break;
 
             case AgentItemAction.Update:
-                if (change.CategoryId is { } categoryId)
+                var current = change.CategoryId is { } categoryId
+                    ? await dbContext.MenuCategories.AsNoTracking()
+                        .SingleOrDefaultAsync(x => x.Id == categoryId && x.TenantId == tenantId, cancellationToken)
+                    : null;
+                if (current is null)
                 {
-                    var current = await dbContext.MenuCategories.AsNoTracking()
-                        .SingleOrDefaultAsync(x => x.Id == categoryId && x.TenantId == tenantId, cancellationToken);
-                    if (current is null) break;
+                    rejected.Add($"Skipped a change to the menu category '{requestedName ?? "unknown"}' because that category could not be found.");
+                    break;
+                }
 
-                    var mergedName = change.Name ?? current.Name;
-                    var mergedDescription = description ?? current.Description;
-                    var mergedSortOrder = change.SortOrder ?? current.SortOrder;
-                    var updated = await restaurantAdminService.UpdateMenuCategoryAsync(
-                        tenantId, categoryId, mergedName, mergedDescription, mergedSortOrder, menuId: null, cancellationToken);
-                    if (updated.Status == MenuMutationStatus.Success) summary.Add($"Updated menu category '{mergedName}'.");
-                    else if (updated.Status == MenuMutationStatus.DuplicateName)
-                        summary.Add($"Skipped renaming menu category to '{mergedName}' - a category with that name already exists.");
+                var mergedName = requestedName ?? current.Name;
+                var updated = await restaurantAdminService.UpdateMenuCategoryAsync(
+                    tenantId,
+                    current.Id,
+                    mergedName,
+                    description ?? current.Description,
+                    change.SortOrder ?? current.SortOrder,
+                    targetMenuId,
+                    cancellationToken);
+                switch (updated.Status)
+                {
+                    case MenuMutationStatus.Success:
+                        summary.Add(targetMenuId is { } movedTo && movedTo != current.MenuId
+                            ? $"Moved menu category '{mergedName}' to another menu."
+                            : $"Updated menu category '{mergedName}'.");
+                        break;
+                    case MenuMutationStatus.DuplicateName:
+                        rejected.Add($"Skipped the change to menu category '{mergedName}' - that menu already has a category with that name.");
+                        break;
+                    case MenuMutationStatus.MenuInvalid:
+                        rejected.Add($"Skipped moving menu category '{mergedName}' - its new menu could not be found.");
+                        break;
+                    default:
+                        rejected.Add($"The menu category '{mergedName}' could not be updated.");
+                        break;
                 }
                 break;
 
             case AgentItemAction.Delete:
-                if (change.CategoryId is { } deleteCategoryId)
-                {
-                    var deleteCategoryName = await dbContext.MenuCategories.AsNoTracking()
+                var deleteCategoryName = change.CategoryId is { } deleteCategoryId
+                    ? await dbContext.MenuCategories.AsNoTracking()
                         .Where(x => x.Id == deleteCategoryId && x.TenantId == tenantId)
                         .Select(x => x.Name)
-                        .SingleOrDefaultAsync(cancellationToken);
-                    var deleted = await restaurantAdminService.DeleteMenuCategoryAsync(tenantId, deleteCategoryId, cancellationToken);
-                    if (deleted) summary.Add($"Deleted menu category '{deleteCategoryName}'.");
+                        .SingleOrDefaultAsync(cancellationToken)
+                    : null;
+                if (deleteCategoryName is not null
+                    && await restaurantAdminService.DeleteMenuCategoryAsync(tenantId, change.CategoryId!.Value, cancellationToken))
+                {
+                    summary.Add($"Deleted menu category '{deleteCategoryName}'.");
+                }
+                else
+                {
+                    rejected.Add($"Skipped deleting the menu category '{requestedName ?? "unknown"}' because it could not be found.");
                 }
                 break;
         }
     }
 
+    /// <summary>
+    /// The category a new item goes into: an explicit id, or else the category with that name, preferring
+    /// one created earlier in this change-set. Null when there is no match or more than one.
+    /// </summary>
+    private async Task<Guid?> ResolveItemCategoryIdAsync(
+        Guid tenantId,
+        AgentMenuItemChange change,
+        MenuApplyContext context,
+        CancellationToken cancellationToken)
+    {
+        if (change.CategoryId is not null)
+        {
+            return change.CategoryId;
+        }
+
+        var categoryName = NullIfBlank(change.CategoryName);
+        if (categoryName is null)
+        {
+            return null;
+        }
+
+        var menuId = await ResolveMenuIdAsync(tenantId, change.MenuId, change.MenuName, context, cancellationToken);
+
+        var created = context.NewCategories
+            .Where(x => string.Equals(x.Name, categoryName, StringComparison.OrdinalIgnoreCase) && (menuId is null || x.MenuId == menuId))
+            .ToList();
+        if (created.Count > 0)
+        {
+            return created.Count == 1 ? created[0].Id : null;
+        }
+
+        var existing = await dbContext.MenuCategories.AsNoTracking()
+            .Where(x => x.TenantId == tenantId)
+            .Select(x => new { x.Id, x.Name, x.MenuId })
+            .ToListAsync(cancellationToken);
+        var matches = existing
+            .Where(x => string.Equals(x.Name, categoryName, StringComparison.OrdinalIgnoreCase) && (menuId is null || x.MenuId == menuId))
+            .ToList();
+        return matches.Count == 1 ? matches[0].Id : null;
+    }
+
     private async Task ApplyItemChangeAsync(
         Guid tenantId,
         AgentMenuItemChange change,
-        CancellationToken cancellationToken,
+        MenuApplyContext context,
         List<string> summary,
-        IReadOnlyDictionary<string, Guid> newCategoryIdsByName)
+        List<string> rejected,
+        CancellationToken cancellationToken)
     {
         if (!Enum.TryParse<AgentItemAction>(change.Action, ignoreCase: true, out var action))
         {
-            summary.Add($"Skipped menu item change with unknown action '{change.Action}'.");
+            rejected.Add($"Skipped menu item change with unknown action '{change.Action}'.");
+            return;
+        }
+
+        var requestedName = NullIfBlank(change.Name);
+        if (change.Price < 0)
+        {
+            rejected.Add($"Skipped menu item '{requestedName ?? "unknown"}' - a price can't be negative.");
             return;
         }
 
         switch (action)
         {
             case AgentItemAction.Create:
-                // categoryId is set for existing categories; categoryName resolves one created earlier in this same change-set.
-                var resolvedCategoryId = change.CategoryId
-                    ?? (change.CategoryName is { } categoryName && newCategoryIdsByName.TryGetValue(categoryName, out var newCategoryId)
-                        ? newCategoryId
-                        : (Guid?)null);
-
-                if (resolvedCategoryId is { } categoryId)
+                if (requestedName is null)
                 {
-                    var request = new CreateMenuItemRequest(
-                        categoryId,
-                        change.Name ?? string.Empty,
-                        change.Description ?? string.Empty,
-                        change.Price ?? 0m,
-                        change.IsAvailable ?? true,
-                        change.SortOrder ?? 0);
-
-                    var result = await restaurantAdminService.CreateMenuItemAsync(tenantId, request, cancellationToken);
-                    if (result.Status == MenuItemMutationStatus.Success)
-                    {
-                        summary.Add($"Created menu item '{request.Name}' (${request.Price:0.00}).");
-                    }
-                    else if (result.Status == MenuItemMutationStatus.LimitReached)
-                    {
-                        summary.Add($"Skipped menu item '{request.Name}' - the {MenuLimits.MaxItemsPerTenant}-item limit was reached.");
-                    }
+                    rejected.Add("Skipped a new menu item because it has no name.");
+                    break;
                 }
-                else
+
+                if (await ResolveItemCategoryIdAsync(tenantId, change, context, cancellationToken) is not { } categoryId)
                 {
-                    summary.Add($"Skipped menu item '{change.Name ?? "unknown"}' - could not resolve its category.");
+                    rejected.Add($"Skipped menu item '{requestedName}' - could not resolve its category.");
+                    break;
+                }
+
+                var request = new CreateMenuItemRequest(
+                    categoryId,
+                    requestedName,
+                    change.Description?.Trim() ?? string.Empty,
+                    change.Price ?? 0m,
+                    change.IsAvailable ?? true,
+                    change.SortOrder ?? 0);
+
+                var result = await restaurantAdminService.CreateMenuItemAsync(tenantId, request, cancellationToken);
+                switch (result.Status)
+                {
+                    case MenuItemMutationStatus.Success:
+                        summary.Add($"Created menu item '{request.Name}' (${request.Price:0.00}).");
+                        break;
+                    case MenuItemMutationStatus.LimitReached:
+                        rejected.Add($"Skipped menu item '{request.Name}' - the {MenuLimits.MaxItemsPerTenant}-item limit was reached.");
+                        break;
+                    default:
+                        rejected.Add($"Skipped menu item '{request.Name}' - could not resolve its category.");
+                        break;
                 }
                 break;
 
             case AgentItemAction.Update:
-                if (change.ItemId is { } itemId)
+                var current = change.ItemId is { } itemId
+                    ? await dbContext.MenuItems.AsNoTracking()
+                        .SingleOrDefaultAsync(x => x.Id == itemId && x.TenantId == tenantId, cancellationToken)
+                    : null;
+                if (current is null)
                 {
-                    var current = await dbContext.MenuItems.AsNoTracking()
-                        .SingleOrDefaultAsync(x => x.Id == itemId && x.TenantId == tenantId, cancellationToken);
-                    if (current is null) break;
+                    rejected.Add($"Skipped a change to the menu item '{requestedName ?? "unknown"}' because that item could not be found.");
+                    break;
+                }
 
-                    var merged = new UpdateMenuItemRequest(
-                        change.CategoryId ?? current.CategoryId,
-                        change.Name ?? current.Name,
-                        change.Description ?? current.Description,
-                        change.Price ?? current.Price,
-                        change.IsAvailable ?? current.IsAvailable,
-                        change.SortOrder ?? current.SortOrder);
+                var merged = new UpdateMenuItemRequest(
+                    change.CategoryId ?? current.CategoryId,
+                    requestedName ?? current.Name,
+                    change.Description?.Trim() ?? current.Description,
+                    change.Price ?? current.Price,
+                    change.IsAvailable ?? current.IsAvailable,
+                    change.SortOrder ?? current.SortOrder);
 
-                    var result = await restaurantAdminService.UpdateMenuItemAsync(tenantId, itemId, merged, cancellationToken);
-                    if (result.Status == MenuItemMutationStatus.Success)
-                    {
-                        summary.Add($"Updated menu item '{merged.Name}' (${merged.Price:0.00}).");
-                    }
+                var updateResult = await restaurantAdminService.UpdateMenuItemAsync(tenantId, current.Id, merged, cancellationToken);
+                if (updateResult.Status == MenuItemMutationStatus.Success)
+                {
+                    summary.Add($"Updated menu item '{merged.Name}' (${merged.Price:0.00}).");
+                }
+                else
+                {
+                    rejected.Add($"Skipped the change to menu item '{merged.Name}' - its category could not be found.");
                 }
                 break;
 
             case AgentItemAction.Delete:
-                if (change.ItemId is { } deleteItemId)
-                {
-                    var deleteItemName = await dbContext.MenuItems.AsNoTracking()
+                var deleteItemName = change.ItemId is { } deleteItemId
+                    ? await dbContext.MenuItems.AsNoTracking()
                         .Where(x => x.Id == deleteItemId && x.TenantId == tenantId)
                         .Select(x => x.Name)
-                        .SingleOrDefaultAsync(cancellationToken);
-                    var deleted = await restaurantAdminService.DeleteMenuItemAsync(tenantId, deleteItemId, cancellationToken);
-                    if (deleted) summary.Add($"Deleted menu item '{deleteItemName}'.");
+                        .SingleOrDefaultAsync(cancellationToken)
+                    : null;
+                if (deleteItemName is not null
+                    && await restaurantAdminService.DeleteMenuItemAsync(tenantId, change.ItemId!.Value, cancellationToken))
+                {
+                    summary.Add($"Deleted menu item '{deleteItemName}'.");
+                }
+                else
+                {
+                    rejected.Add($"Skipped deleting the menu item '{requestedName ?? "unknown"}' because it could not be found.");
                 }
                 break;
         }

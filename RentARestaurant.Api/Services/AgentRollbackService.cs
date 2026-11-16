@@ -85,7 +85,16 @@ public class AgentRollbackService(
         var snapshot = JsonSerializer.Deserialize<PublicRestaurantResponse>(target.PreChangeSnapshotJson, JsonOptions)
             ?? throw new InvalidOperationException("Failed to deserialize pre-change snapshot.");
 
-        await restaurantAdminService.RestoreSnapshotAsync(tenantId, snapshot, cancellationToken);
+        // Settings added after this snapshot was stored are missing from its JSON and must be left alone.
+        HashSet<string> presentKeys;
+        using (var document = JsonDocument.Parse(target.PreChangeSnapshotJson))
+        {
+            presentKeys = document.RootElement.EnumerateObject()
+                .Select(property => property.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        await restaurantAdminService.RestoreSnapshotAsync(tenantId, snapshot, presentKeys, cancellationToken);
 
         // The site now predates every change applied at or after the target, so none of those can be rolled back again
         // (restoring one of their snapshots would bring back changes that were just undone).

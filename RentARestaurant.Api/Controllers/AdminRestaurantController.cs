@@ -20,17 +20,9 @@ public class AdminRestaurantController(
     IRestaurantAdminService restaurantAdminService) : ControllerBase
 {
     private const string Suspended = "suspended";
-    private static readonly System.Text.RegularExpressions.Regex PhoneNumberPattern =
-        new(@"^[0-9+\-().\s]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
-    private static readonly System.Text.RegularExpressions.Regex HexColorPattern =
-        new(@"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private static string? NullIfBlank(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    // Background glow positions are percentages chosen from an 11-step slider (0, 10, ..., 100).
-    private static bool IsValidBackgroundPosition(int value) =>
-        value is >= 0 and <= 100 && value % 10 == 0;
 
     [HttpGet]
     [RequireTenantContext]
@@ -154,47 +146,10 @@ public class AdminRestaurantController(
             CustomBackgroundMainHexColor = NullIfBlank(request.CustomBackgroundMainHexColor)
         };
 
-        // Splash colors are kept while their toggles are off so re-enabling restores them, but each
-        // is only required once the custom background is shown with that splash active.
-        if (trimmedRequest.ShowCustomBackground &&
-            ((trimmedRequest.CustomBackgroundSplash1Active && trimmedRequest.CustomBackgroundHexColor1 is null) ||
-             (trimmedRequest.CustomBackgroundSplash2Active && trimmedRequest.CustomBackgroundHexColor2 is null)))
+        // The same rules apply to branding changes made by the agent pipeline.
+        if (BrandingRules.Validate(trimmedRequest) is { } brandingError)
         {
-            return BadRequest("Each active background splash color needs a color when the custom background is enabled.");
-        }
-
-        // The main background color is optional: null means the site's default page color.
-        if ((trimmedRequest.CustomBackgroundHexColor1 is not null && !HexColorPattern.IsMatch(trimmedRequest.CustomBackgroundHexColor1)) ||
-            (trimmedRequest.CustomBackgroundHexColor2 is not null && !HexColorPattern.IsMatch(trimmedRequest.CustomBackgroundHexColor2)) ||
-            (trimmedRequest.CustomBackgroundMainHexColor is not null && !HexColorPattern.IsMatch(trimmedRequest.CustomBackgroundMainHexColor)))
-        {
-            return BadRequest("Custom background colors must be hex colors like #1A2B3C.");
-        }
-
-        if (!IsValidBackgroundPosition(trimmedRequest.CustomBackgroundPosition1X) ||
-            !IsValidBackgroundPosition(trimmedRequest.CustomBackgroundPosition1Y) ||
-            !IsValidBackgroundPosition(trimmedRequest.CustomBackgroundPosition2X) ||
-            !IsValidBackgroundPosition(trimmedRequest.CustomBackgroundPosition2Y))
-        {
-            return BadRequest("Custom background positions must be between 0 and 100 in steps of 10.");
-        }
-
-        // Kept while the white background is off so re-enabling restores it.
-        if (trimmedRequest.ContactHoursWhiteBackgroundTransparency is < ContactHoursWhiteBackgroundDefaults.MinTransparency
-            or > ContactHoursWhiteBackgroundDefaults.MaxTransparency)
-        {
-            return BadRequest("Contact and Hours white background transparency must be between 0 and 100.");
-        }
-
-        if (trimmedRequest.Address?.Length > 300)
-        {
-            return BadRequest("Address must be 300 characters or fewer.");
-        }
-
-        if (trimmedRequest.PhoneNumber is not null &&
-            (trimmedRequest.PhoneNumber.Length > 30 || !PhoneNumberPattern.IsMatch(trimmedRequest.PhoneNumber)))
-        {
-            return BadRequest("Phone number must be 30 characters or fewer and contain only digits, spaces, and + - ( ) . characters.");
+            return BadRequest(brandingError);
         }
 
         var updated = await restaurantAdminService.UpdateBrandingAsync(tenantContext.TenantId!.Value, trimmedRequest, cancellationToken);
