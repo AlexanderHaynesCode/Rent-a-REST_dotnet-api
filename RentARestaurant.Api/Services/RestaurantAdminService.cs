@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using RentARestaurant.Api.Contracts;
 using RentARestaurant.Api.Data;
+using RentARestaurant.Api.Domain;
 using RentARestaurant.Api.Domain.Entities;
 
 namespace RentARestaurant.Api.Services;
@@ -27,6 +28,24 @@ public enum MenuMutationStatus
 }
 
 public sealed record MenuMutationResult(MenuMutationStatus Status, Guid? Id = null);
+
+public enum MenuCloneStatus
+{
+    Success,
+    NotFound,
+    DuplicateName,
+    LimitReached
+}
+
+/// <summary>
+/// Outcome of copying a menu. <see cref="Copy"/> is set on success; <see cref="LimitProblems"/> holds the
+/// tenant-facing reasons when the copy would go past a menu, category or item limit.
+/// </summary>
+public sealed record MenuCloneResult(
+    MenuCloneStatus Status,
+    string? SourceName = null,
+    ClonedMenuResponse? Copy = null,
+    IReadOnlyList<string>? LimitProblems = null);
 
 /// <summary>
 /// Shared read/write logic for a tenant's restaurant profile, menu, and hours. Used by both the
@@ -55,6 +74,12 @@ public interface IRestaurantAdminService
 
     /// <summary>Deletes the menu with all of its categories and items. A tenant's last menu cannot be deleted.</summary>
     Task<MenuMutationResult> DeleteMenuAsync(Guid tenantId, Guid menuId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Copies the menu with all of its categories and items into a new menu, in one save. Nothing is copied
+    /// when the copy would take the tenant past the menu, category or item limit.
+    /// </summary>
+    Task<MenuCloneResult> CloneMenuAsync(Guid tenantId, Guid sourceMenuId, CloneMenuRequest request, CancellationToken cancellationToken);
 
     Task<bool> SetMenuSettingsAsync(Guid tenantId, bool allowMenuPdfDownload, CancellationToken cancellationToken);
 
@@ -457,6 +482,115 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         dbContext.Menus.Remove(menu);
         await dbContext.SaveChangesAsync(cancellationToken);
         return new MenuMutationResult(MenuMutationStatus.Success, menuId);
+    }
+
+    public async Task<MenuCloneResult> CloneMenuAsync(Guid tenantId, Guid sourceMenuId, CloneMenuRequest request, CancellationToken cancellationToken)
+    {
+        var source = await dbContext.Menus
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == sourceMenuId && x.TenantId == tenantId, cancellationToken);
+
+        if (source is null)
+        {
+            return new MenuCloneResult(MenuCloneStatus.NotFound);
+        }
+
+        var sourceCategories = await dbContext.MenuCategories
+            .AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.MenuId == sourceMenuId)
+            .OrderBy(x => x.SortOrder)
+            .ToListAsync(cancellationToken);
+        var sourceCategoryIds = sourceCategories.Select(x => x.Id).ToList();
+        var sourceItems = await dbContext.MenuItems
+            .AsNoTracking()
+            .Where(x => x.TenantId == tenantId && sourceCategoryIds.Contains(x.CategoryId))
+            .OrderBy(x => x.SortOrder)
+            .ToListAsync(cancellationToken);
+
+        var menus = await dbContext.Menus
+            .AsNoTracking()
+            .Where(x => x.TenantId == tenantId)
+            .Select(x => new { x.Name, x.SortOrder })
+            .ToListAsync(cancellationToken);
+        var categoryCount = await dbContext.MenuCategories.CountAsync(x => x.TenantId == tenantId, cancellationToken);
+        var itemCount = await dbContext.MenuItems.CountAsync(x => x.TenantId == tenantId, cancellationToken);
+
+        var limitProblems = MenuCloneRules.LimitProblems(
+            menus.Count, categoryCount, itemCount, sourceCategories.Count, sourceItems.Count);
+        if (limitProblems.Count > 0)
+        {
+            return new MenuCloneResult(MenuCloneStatus.LimitReached, source.Name, LimitProblems: limitProblems);
+        }
+
+        var name = string.IsNullOrWhiteSpace(request.Name)
+            ? MenuCloneRules.NextCopyName(source.Name, menus.Select(x => x.Name))
+            : request.Name.Trim();
+
+        // Same comparison as MenuNameTakenAsync and the menus (tenant_id, name) unique constraint.
+        if (menus.Any(x => x.Name == name))
+        {
+            return new MenuCloneResult(MenuCloneStatus.DuplicateName, source.Name);
+        }
+
+        var menu = new Menu
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            Name = name,
+            Description = request.Description?.Trim() ?? source.Description,
+            SortOrder = request.SortOrder ?? menus.Max(x => x.SortOrder) + 1,
+            // A fresh copy starts hidden so a duplicate never shows up on the live site before the tenant is ready.
+            IsVisible = request.IsVisible ?? false
+        };
+        dbContext.Menus.Add(menu);
+
+        var itemsByCategory = sourceItems.ToLookup(x => x.CategoryId);
+        var categoryResponses = new List<PublicMenuCategoryResponse>();
+        foreach (var sourceCategory in sourceCategories)
+        {
+            var category = new MenuCategory
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                MenuId = menu.Id,
+                Name = sourceCategory.Name,
+                Description = sourceCategory.Description,
+                SortOrder = sourceCategory.SortOrder
+            };
+            dbContext.MenuCategories.Add(category);
+
+            var itemResponses = new List<PublicMenuItemResponse>();
+            foreach (var sourceItem in itemsByCategory[sourceCategory.Id])
+            {
+                var item = new MenuItem
+                {
+                    Id = Guid.NewGuid(),
+                    TenantId = tenantId,
+                    CategoryId = category.Id,
+                    Name = sourceItem.Name,
+                    Description = sourceItem.Description,
+                    Price = sourceItem.Price,
+                    IsAvailable = sourceItem.IsAvailable,
+                    SortOrder = sourceItem.SortOrder
+                };
+                dbContext.MenuItems.Add(item);
+                itemResponses.Add(new PublicMenuItemResponse(
+                    item.Id, item.Name, item.Description, item.Price, item.IsAvailable, item.SortOrder));
+            }
+
+            categoryResponses.Add(new PublicMenuCategoryResponse(
+                category.Id, category.Name, category.Description, category.SortOrder, itemResponses, menu.Id));
+        }
+
+        // One save, so a failure part-way never leaves a half-copied menu behind.
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new MenuCloneResult(
+            MenuCloneStatus.Success,
+            source.Name,
+            new ClonedMenuResponse(
+                new PublicMenuResponse(menu.Id, menu.Name, menu.Description, menu.SortOrder, menu.IsVisible),
+                categoryResponses));
     }
 
     public async Task<bool> SetMenuSettingsAsync(Guid tenantId, bool allowMenuPdfDownload, CancellationToken cancellationToken)

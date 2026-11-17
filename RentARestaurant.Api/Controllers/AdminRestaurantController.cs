@@ -464,6 +464,30 @@ public class AdminRestaurantController(
         };
     }
 
+    /// <summary>Copies the menu with all of its categories and items into a new menu with the given name.</summary>
+    [HttpPost("menus/{id:guid}/clone")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<ActionResult<ClonedMenuResponse>> CloneMenu(Guid id, [FromBody] CloneMenuRequest request, CancellationToken cancellationToken)
+    {
+        var trimmedRequest = request with { Name = request.Name?.Trim() ?? string.Empty, Description = request.Description?.Trim() };
+        if (ValidateMenuFields(trimmedRequest.Name!, trimmedRequest.Description) is { } error)
+        {
+            return BadRequest(new { Error = error });
+        }
+
+        var result = await restaurantAdminService.CloneMenuAsync(tenantContext.TenantId!.Value, id, trimmedRequest, cancellationToken);
+
+        return result.Status switch
+        {
+            MenuCloneStatus.Success => CreatedAtAction(nameof(GetCurrent), new { }, result.Copy),
+            MenuCloneStatus.NotFound => NotFound(new { Error = "That menu could not be found. Refresh the page and try again." }),
+            MenuCloneStatus.DuplicateName => Conflict(new { Error = "A menu with that name already exists." }),
+            MenuCloneStatus.LimitReached => Conflict(new { Error = MenuCloneRules.FailureMessage(result.SourceName!, result.LimitProblems!) }),
+            _ => StatusCode(StatusCodes.Status500InternalServerError)
+        };
+    }
+
     [HttpPut("menus/reorder")]
     [RequireTenantContext]
     [RequireAdminAccess]

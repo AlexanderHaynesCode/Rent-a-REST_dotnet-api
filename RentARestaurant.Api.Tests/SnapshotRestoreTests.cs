@@ -171,6 +171,24 @@ public class SnapshotRestoreTests
     }
 
     [Fact]
+    public async Task Removes_a_cloned_menu_with_its_copied_categories_and_items()
+    {
+        var snapshot = await SnapshotAsync();
+
+        var result = await _service.CloneMenuAsync(_tenantId, _lunchMenuId, new CloneMenuRequest(null), CancellationToken.None);
+        Assert.Equal(MenuCloneStatus.Success, result.Status);
+        Assert.Equal("Lunch_copy", result.Copy!.Menu.Name);
+        Assert.False(result.Copy.Menu.IsVisible); // Lunch is visible, but a fresh copy starts hidden.
+        Assert.Equal(3, await _db.Menus.CountAsync());
+        Assert.Equal(3, await _db.MenuCategories.CountAsync());
+        Assert.Equal(3, await _db.MenuItems.CountAsync());
+
+        await AssertRestoresAsync(snapshot);
+        Assert.Equal(2, await _db.Menus.CountAsync());
+        Assert.Equal(_saladsId, (await _db.MenuItems.SingleAsync(i => i.Name == "Caesar")).CategoryId);
+    }
+
+    [Fact]
     public async Task Restores_menu_names_visibility_and_order_even_when_names_were_swapped()
     {
         var snapshot = await SnapshotAsync();

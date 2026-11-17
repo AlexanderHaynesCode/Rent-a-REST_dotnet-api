@@ -112,6 +112,18 @@ public sealed record UpdateMenuRequest(
     int SortOrder,
     bool IsVisible);
 
+/// <summary>
+/// Copies a menu with all of its categories and items into a new menu. A null or blank Name means the next
+/// free "<menu name>_copy" name; a null Description keeps the copied menu's; a null IsVisible means hidden
+/// (a fresh copy stays off the live site until the tenant shows it); a null SortOrder puts the copy after every
+/// other menu.
+/// </summary>
+public sealed record CloneMenuRequest(
+    string? Name,
+    string? Description = null,
+    int? SortOrder = null,
+    bool? IsVisible = null);
+
 public sealed record SetMenuSettingsRequest(
     bool AllowMenuPdfDownload);
 

@@ -741,7 +741,10 @@ public class AgentRestaurantController(
         List<string> rejected,
         CancellationToken cancellationToken)
     {
-        if (!Enum.TryParse<AgentItemAction>(change.Action, ignoreCase: true, out var action))
+        // "clone" only exists for whole menus, so it is not part of AgentItemAction (shared with categories and items).
+        var isClone = IsAction(change.Action, "clone");
+        var action = default(AgentItemAction);
+        if (!isClone && !Enum.TryParse(change.Action, ignoreCase: true, out action))
         {
             rejected.Add($"Skipped a menu change with unknown action '{change.Action}'.");
             return;
@@ -758,6 +761,12 @@ public class AgentRestaurantController(
         if (description?.Length > MenuLimits.MaxDescriptionLength)
         {
             rejected.Add($"Skipped a menu change because its description exceeds {MenuLimits.MaxDescriptionLength} characters.");
+            return;
+        }
+
+        if (isClone)
+        {
+            await ApplyMenuCloneAsync(tenantId, change, name, description, context, summary, rejected, cancellationToken);
             return;
         }
 
@@ -866,6 +875,63 @@ public class AgentRestaurantController(
         else
         {
             rejected.Add($"The menu '{current.Name}' could not be deleted.");
+        }
+    }
+
+    /// <summary>
+    /// Copies the menu <see cref="AgentMenuChange.MenuId"/> into a new menu named <paramref name="name"/> (null: the
+    /// next free "<menu name>_copy"). The copy is registered by name so later category/item changes in the same
+    /// change-set can add to it through MenuName.
+    /// </summary>
+    private async Task ApplyMenuCloneAsync(
+        Guid tenantId,
+        AgentMenuChange change,
+        string? name,
+        string? description,
+        MenuApplyContext context,
+        List<string> summary,
+        List<string> rejected,
+        CancellationToken cancellationToken)
+    {
+        if (change.MenuId is not { } sourceMenuId)
+        {
+            rejected.Add("Skipped copying a menu because we couldn't tell which menu to copy.");
+            return;
+        }
+
+        var result = await restaurantAdminService.CloneMenuAsync(
+            tenantId,
+            sourceMenuId,
+            new CloneMenuRequest(name, description, change.SortOrder, change.IsVisible),
+            cancellationToken);
+
+        switch (result.Status)
+        {
+            case MenuCloneStatus.Success:
+                var clone = result.Copy!;
+                context.NewMenuIdsByName[clone.Menu.Name] = clone.Menu.Id;
+                if (name is null)
+                {
+                    // The translator refers to an unnamed copy as "<menu name>_copy", even when an older menu
+                    // already had that name and this copy became "<menu name>_copy_2".
+                    context.NewMenuIdsByName.TryAdd($"{result.SourceName}{MenuCloneRules.CopySuffix}", clone.Menu.Id);
+                }
+
+                var itemCount = clone.Categories.Sum(c => c.Items.Count);
+                var hidden = clone.Menu.IsVisible ? "" : " (hidden from your site until you make it visible)";
+                summary.Add(
+                    $"Copied the menu '{result.SourceName}' to a new menu '{clone.Menu.Name}' with its " +
+                    $"{clone.Categories.Count} category(ies) and {itemCount} item(s){hidden}.");
+                break;
+            case MenuCloneStatus.LimitReached:
+                rejected.Add($"Skipped copying the menu '{result.SourceName}'. {string.Join(" ", result.LimitProblems!)}");
+                break;
+            case MenuCloneStatus.DuplicateName:
+                rejected.Add($"Skipped copying the menu '{result.SourceName}' - a menu named '{name}' already exists.");
+                break;
+            default:
+                rejected.Add("Skipped copying a menu because the menu to copy could not be found.");
+                break;
         }
     }
 

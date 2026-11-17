@@ -56,6 +56,7 @@ X-Admin-User-Id: owner-demo
 - `PUT /api/admin/restaurant/hours`
 - `POST /api/admin/restaurant/menu/categories`
 - `POST /api/admin/restaurant/menu/items`
+- `POST /api/admin/restaurant/menus/{id}/clone` (copies a menu with its categories and items into a new menu, which starts hidden from the site; refused when it would exceed the menu, category or item limits)
 - `POST /api/system/provisioning/tenants`
 - `POST /api/stripe/webhooks` (handles `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`; subscription metadata is stored in `tenant_subscriptions`)
 

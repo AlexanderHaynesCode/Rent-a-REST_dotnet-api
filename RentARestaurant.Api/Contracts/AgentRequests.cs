@@ -8,8 +8,11 @@ public enum AgentItemAction
 }
 
 /// <summary>
-/// DeleteConfirmed must be true for a delete: deleting a menu removes its categories and items, so the
-/// tenant is asked to confirm first (agent-validator-service raises the question).
+/// Action is "create", "update", "delete" or "clone". DeleteConfirmed must be true for a delete: deleting a menu
+/// removes its categories and items, so the tenant is asked to confirm first (agent-validator-service raises the
+/// question). A "clone" copies the menu MenuId, with all of its categories and items, into a new menu called Name
+/// (null: "<menu name>_copy"). The copy starts hidden unless IsVisible is true; Description and SortOrder
+/// override the copied values when set.
 /// </summary>
 public sealed record AgentMenuChange(
     string Action,

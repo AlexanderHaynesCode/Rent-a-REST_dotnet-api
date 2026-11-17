@@ -21,6 +21,11 @@ public sealed record AdminBootstrapResponse(
     AdminTenantSummaryResponse Tenant,
     PublicRestaurantResponse Restaurant);
 
+/// <summary>The menu created by a clone, with its copied categories and items (all with new ids).</summary>
+public sealed record ClonedMenuResponse(
+    PublicMenuResponse Menu,
+    IReadOnlyList<PublicMenuCategoryResponse> Categories);
+
 public sealed record AdminDateSpecificHourResponse(
     DateOnly Date,
     DayOfWeek DayOfWeek,
