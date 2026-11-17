@@ -417,6 +417,11 @@ public class AgentRestaurantController(
     {
         public Dictionary<string, Guid> NewMenuIdsByName { get; } = new(StringComparer.OrdinalIgnoreCase);
         public List<(string Name, Guid MenuId, Guid Id)> NewCategories { get; } = [];
+
+        // Menus/categories this change-set tried to create but couldn't. Later changes that only fail because
+        // they point at one of these are dropped silently - the root reason was already reported.
+        public HashSet<string> SkippedMenuNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> SkippedCategoryNames { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private static (List<AgentDateSpecificHoursChange> Active, List<string> Rejected, string? Error) ValidateDateSpecificHours(
@@ -791,6 +796,7 @@ public class AgentRestaurantController(
                         : $"Created the menu '{name}'.");
                     break;
                 case MenuMutationStatus.LimitReached:
+                    context.SkippedMenuNames.Add(name);
                     rejected.Add($"Skipped creating the menu '{name}' - the {MenuLimits.MaxMenusPerTenant}-menu limit was reached.");
                     break;
                 case MenuMutationStatus.DuplicateName:
@@ -895,6 +901,7 @@ public class AgentRestaurantController(
     {
         if (change.MenuId is not { } sourceMenuId)
         {
+            if (name is not null) context.SkippedMenuNames.Add(name);
             rejected.Add("Skipped copying a menu because we couldn't tell which menu to copy.");
             return;
         }
@@ -904,6 +911,18 @@ public class AgentRestaurantController(
             sourceMenuId,
             new CloneMenuRequest(name, description, change.SortOrder, change.IsVisible),
             cancellationToken);
+
+        if (result.Status != MenuCloneStatus.Success)
+        {
+            if (name is not null)
+            {
+                context.SkippedMenuNames.Add(name);
+            }
+            else if (result.SourceName is not null)
+            {
+                context.SkippedMenuNames.Add($"{result.SourceName}{MenuCloneRules.CopySuffix}");
+            }
+        }
 
         switch (result.Status)
         {
@@ -967,6 +986,17 @@ public class AgentRestaurantController(
         var targetMenuId = await ResolveMenuIdAsync(tenantId, change.MenuId, change.MenuName, context, cancellationToken);
         if (targetMenuId is null && NullIfBlank(change.MenuName) is { } unknownMenuName && action != AgentItemAction.Delete)
         {
+            if (context.SkippedMenuNames.Contains(unknownMenuName))
+            {
+                // Its menu was skipped earlier in this request and that reason is already reported.
+                if (action == AgentItemAction.Create && requestedName is not null)
+                {
+                    context.SkippedCategoryNames.Add(requestedName);
+                }
+
+                return;
+            }
+
             rejected.Add($"Skipped the menu category '{requestedName ?? "unknown"}' - the menu '{unknownMenuName}' could not be found.");
             return;
         }
@@ -988,12 +1018,15 @@ public class AgentRestaurantController(
                         summary.Add($"Created menu category '{name}'.");
                         break;
                     case MenuMutationStatus.LimitReached:
+                        context.SkippedCategoryNames.Add(name);
                         rejected.Add($"Skipped creating menu category '{name}' - the {MenuLimits.MaxCategoriesPerTenant}-category limit was reached.");
                         break;
                     case MenuMutationStatus.DuplicateName:
+                        // The category already exists, so later items that name it still resolve to it.
                         rejected.Add($"Skipped creating menu category '{name}' - that menu already has a category with that name.");
                         break;
                     case MenuMutationStatus.MenuInvalid:
+                        context.SkippedCategoryNames.Add(name);
                         rejected.Add($"Skipped creating menu category '{name}' - its menu could not be found.");
                         break;
                 }
@@ -1131,6 +1164,15 @@ public class AgentRestaurantController(
 
                 if (await ResolveItemCategoryIdAsync(tenantId, change, context, cancellationToken) is not { } categoryId)
                 {
+                    var parentSkipped = change.CategoryId is null
+                        && ((NullIfBlank(change.CategoryName) is { } skippedCategory && context.SkippedCategoryNames.Contains(skippedCategory))
+                            || (NullIfBlank(change.MenuName) is { } skippedMenu && context.SkippedMenuNames.Contains(skippedMenu)));
+                    if (parentSkipped)
+                    {
+                        // Its category or menu was skipped earlier in this request and that reason is already reported.
+                        break;
+                    }
+
                     rejected.Add($"Skipped menu item '{requestedName}' - could not resolve its category.");
                     break;
                 }
