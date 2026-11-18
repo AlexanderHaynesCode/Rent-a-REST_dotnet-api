@@ -439,10 +439,17 @@ CREATE TABLE menus (
     description VARCHAR(300) NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
     is_visible BOOLEAN NOT NULL DEFAULT TRUE,
+    background_style VARCHAR(20) NOT NULL DEFAULT 'none',
+    background_image_url TEXT,
+    background_hex_color VARCHAR(12),
+    background_pattern VARCHAR(30),
+    show_background_on_site BOOLEAN NOT NULL DEFAULT FALSE,
 
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     UNIQUE(tenant_id, name),
-    CONSTRAINT name_not_empty CHECK (name != '')
+    CONSTRAINT name_not_empty CHECK (name != ''),
+    CONSTRAINT menus_background_style_values CHECK (background_style IN ('none', 'image', 'color', 'pattern')),
+    CONSTRAINT hex_color_format_menu_background CHECK (background_hex_color IS NULL OR background_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$')
 );
 
 CREATE INDEX idx_menus_sort_order ON menus(tenant_id, sort_order);
@@ -508,6 +515,21 @@ ALTER TABLE menu_categories DROP CONSTRAINT IF EXISTS menu_categories_tenant_id_
 ALTER TABLE menu_categories ADD CONSTRAINT menu_categories_menu_id_name_key UNIQUE (menu_id, name);
 
 COMMIT;
+```
+
+**For existing databases, add menu backgrounds (set on the admin portal's Menus page when editing a menu).** `background_style` says which background is drawn: `'none'` (the default), `'image'`, `'color'` or `'pattern'`. The admin portal always draws it behind the menu's row; the restaurant site only draws it behind that menu's categories while `show_background_on_site` is TRUE (defaults to FALSE, so existing sites look the same). The other three values are kept while a different style is chosen, so switching back restores them. `background_image_url` is only set by the admin `menus/{id}/background-image` upload/delete endpoints; every upload gets its own R2 key (`tenants/{tenant_id}/menu-background-{menu_id}-{unix_ms}`) because a cloned menu shares its source's image URL, and the API only deletes an image from R2 once no menu uses it. `background_pattern` holds a pattern key (`'gingham'`, `'subway-tile'`, `'terrazzo'`, `'parchment'`, `'linen-paper'`, `'watercolor-paper'` or `'handmade-paper'`), or NULL when none was picked; the API validates it rather than a CHECK constraint, so adding a pattern needs no DB change. Run this before deploying the API, since EF selects all five columns. Safe to re-run except for the constraints, which fail if they already exist:
+
+```sql
+ALTER TABLE menus
+ADD COLUMN IF NOT EXISTS background_style VARCHAR(20) NOT NULL DEFAULT 'none',
+ADD COLUMN IF NOT EXISTS background_image_url TEXT,
+ADD COLUMN IF NOT EXISTS background_hex_color VARCHAR(12),
+ADD COLUMN IF NOT EXISTS background_pattern VARCHAR(30),
+ADD COLUMN IF NOT EXISTS show_background_on_site BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE menus
+ADD CONSTRAINT menus_background_style_values CHECK (background_style IN ('none', 'image', 'color', 'pattern')),
+ADD CONSTRAINT hex_color_format_menu_background CHECK (background_hex_color IS NULL OR background_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$');
 ```
 
 ---
@@ -729,9 +751,16 @@ CREATE TABLE menus (
     description VARCHAR(300) NOT NULL DEFAULT '',
     sort_order INTEGER NOT NULL DEFAULT 0,
     is_visible BOOLEAN NOT NULL DEFAULT TRUE,
+    background_style VARCHAR(20) NOT NULL DEFAULT 'none',
+    background_image_url TEXT,
+    background_hex_color VARCHAR(12),
+    background_pattern VARCHAR(30),
+    show_background_on_site BOOLEAN NOT NULL DEFAULT FALSE,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     UNIQUE(tenant_id, name),
-    CONSTRAINT name_not_empty CHECK (name != '')
+    CONSTRAINT name_not_empty CHECK (name != ''),
+    CONSTRAINT menus_background_style_values CHECK (background_style IN ('none', 'image', 'color', 'pattern')),
+    CONSTRAINT hex_color_format_menu_background CHECK (background_hex_color IS NULL OR background_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$')
 );
 
 CREATE INDEX idx_menus_sort_order ON menus(tenant_id, sort_order);

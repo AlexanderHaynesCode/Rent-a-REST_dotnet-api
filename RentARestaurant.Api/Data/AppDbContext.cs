@@ -125,6 +125,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.Description).HasColumnName("description").HasMaxLength(300).HasDefaultValue(string.Empty);
             entity.Property(x => x.SortOrder).HasColumnName("sort_order");
             entity.Property(x => x.IsVisible).HasColumnName("is_visible");
+            entity.Property(x => x.BackgroundStyle).HasColumnName("background_style").HasMaxLength(20);
+            entity.Property(x => x.BackgroundImageUrl).HasColumnName("background_image_url");
+            entity.Property(x => x.BackgroundHexColor).HasColumnName("background_hex_color").HasMaxLength(12);
+            entity.Property(x => x.BackgroundPattern).HasColumnName("background_pattern").HasMaxLength(30);
+            entity.Property(x => x.ShowBackgroundOnSite).HasColumnName("show_background_on_site");
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.Menus)
                 .HasForeignKey(x => x.TenantId)

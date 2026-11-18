@@ -226,7 +226,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 TopHoursStyle: profile.TopHoursStyle,
                 TopHoursOpenStatusDetail: profile.TopHoursOpenStatusDetail,
                 Menus: menus
-                    .Select(m => new PublicMenuResponse(m.Id, m.Name, m.Description, m.SortOrder, m.IsVisible))
+                    .Select(PublicMenuResponse.From)
                     .ToList(),
                 AllowMenuPdfDownload: profile.AllowMenuPdfDownload,
                 ShowTopContactSection: profile.ShowTopContactSection,
@@ -447,6 +447,10 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         menu.Description = request.Description.Trim();
         menu.SortOrder = request.SortOrder;
         menu.IsVisible = request.IsVisible;
+        menu.BackgroundStyle = request.BackgroundStyle ?? menu.BackgroundStyle;
+        menu.BackgroundHexColor = request.BackgroundHexColor ?? menu.BackgroundHexColor;
+        menu.BackgroundPattern = request.BackgroundPattern ?? menu.BackgroundPattern;
+        menu.ShowBackgroundOnSite = request.ShowBackgroundOnSite ?? menu.ShowBackgroundOnSite;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return new MenuMutationResult(MenuMutationStatus.Success, menuId);
@@ -540,7 +544,14 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             Description = request.Description?.Trim() ?? source.Description,
             SortOrder = request.SortOrder ?? menus.Max(x => x.SortOrder) + 1,
             // A fresh copy starts hidden so a duplicate never shows up on the live site before the tenant is ready.
-            IsVisible = request.IsVisible ?? false
+            IsVisible = request.IsVisible ?? false,
+            // The copy shares the source's background image URL. Each upload has its own R2 key and an image is
+            // only deleted from R2 once no menu uses it, so either menu can replace or delete it independently.
+            BackgroundStyle = source.BackgroundStyle,
+            BackgroundImageUrl = source.BackgroundImageUrl,
+            BackgroundHexColor = source.BackgroundHexColor,
+            BackgroundPattern = source.BackgroundPattern,
+            ShowBackgroundOnSite = source.ShowBackgroundOnSite
         };
         dbContext.Menus.Add(menu);
 
@@ -589,7 +600,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             MenuCloneStatus.Success,
             source.Name,
             new ClonedMenuResponse(
-                new PublicMenuResponse(menu.Id, menu.Name, menu.Description, menu.SortOrder, menu.IsVisible),
+                PublicMenuResponse.From(menu),
                 categoryResponses));
     }
 
@@ -1059,23 +1070,15 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 var target = existingMenus.FirstOrDefault(m => m.Id == menu.Id);
                 if (target is null)
                 {
-                    dbContext.Menus.Add(new Menu
-                    {
-                        Id = menu.Id,
-                        TenantId = tenantId,
-                        Name = menu.Name,
-                        Description = menu.Description ?? string.Empty,
-                        SortOrder = menu.SortOrder,
-                        IsVisible = menu.IsVisible
-                    });
+                    target = new Menu { Id = menu.Id, TenantId = tenantId };
+                    dbContext.Menus.Add(target);
                 }
-                else
-                {
-                    target.Name = menu.Name;
-                    target.Description = menu.Description ?? string.Empty;
-                    target.SortOrder = menu.SortOrder;
-                    target.IsVisible = menu.IsVisible;
-                }
+
+                target.Name = menu.Name;
+                target.Description = menu.Description ?? string.Empty;
+                target.SortOrder = menu.SortOrder;
+                target.IsVisible = menu.IsVisible;
+                RestoreMenuBackground(target, menu);
             }
         }
 
@@ -1144,5 +1147,23 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         dbContext.Menus.RemoveRange(staleMenus);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// A snapshot stored before menu backgrounds existed has no BackgroundStyle for its menus; the menu's current
+    /// background is then left as is instead of being cleared.
+    /// </summary>
+    private static void RestoreMenuBackground(Menu target, PublicMenuResponse snapshotMenu)
+    {
+        if (snapshotMenu.BackgroundStyle is null)
+        {
+            return;
+        }
+
+        target.BackgroundStyle = snapshotMenu.BackgroundStyle;
+        target.BackgroundImageUrl = snapshotMenu.BackgroundImageUrl;
+        target.BackgroundHexColor = snapshotMenu.BackgroundHexColor;
+        target.BackgroundPattern = snapshotMenu.BackgroundPattern;
+        target.ShowBackgroundOnSite = snapshotMenu.ShowBackgroundOnSite;
     }
 }

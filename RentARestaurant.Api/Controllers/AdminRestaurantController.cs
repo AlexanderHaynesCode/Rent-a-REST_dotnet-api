@@ -251,21 +251,9 @@ public class AdminRestaurantController(
             return BadRequest(new { Error = "imageType must be one of: logo, hero, primary-cta, custom-background." });
         }
 
-        if (file is null || file.Length == 0)
+        if (ValidateImageFile(file) is { } fileError)
         {
-            return BadRequest(new { Error = "No file provided." });
-        }
-
-        var allowedContentTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "image/jpeg", "image/png" };
-        if (!allowedContentTypes.Contains(file.ContentType))
-        {
-            return BadRequest(new { Error = "Only JPEG and PNG images are accepted." });
-        }
-
-        const long maxBytes = 10 * 1024 * 1024; // 10 MB
-        if (file.Length > maxBytes)
-        {
-            return BadRequest(new { Error = "File size must not exceed 10 MB." });
+            return BadRequest(new { Error = fileError });
         }
 
         var profile = await dbContext.RestaurantProfiles
@@ -431,8 +419,17 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<IActionResult> UpdateMenu(Guid id, [FromBody] UpdateMenuRequest request, CancellationToken cancellationToken)
     {
-        var trimmedRequest = request with { Name = request.Name.Trim(), Description = request.Description.Trim() };
-        if (ValidateMenuFields(trimmedRequest.Name, trimmedRequest.Description) is { } error)
+        var trimmedRequest = request with
+        {
+            Name = request.Name.Trim(),
+            Description = request.Description.Trim(),
+            BackgroundStyle = NullIfBlank(request.BackgroundStyle),
+            BackgroundHexColor = NullIfBlank(request.BackgroundHexColor),
+            BackgroundPattern = NullIfBlank(request.BackgroundPattern)
+        };
+        var error = ValidateMenuFields(trimmedRequest.Name, trimmedRequest.Description)
+            ?? ValidateMenuBackground(trimmedRequest);
+        if (error is not null)
         {
             return BadRequest(new { Error = error });
         }
@@ -453,7 +450,18 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<IActionResult> DeleteMenu(Guid id, CancellationToken cancellationToken)
     {
-        var result = await restaurantAdminService.DeleteMenuAsync(tenantContext.TenantId!.Value, id, cancellationToken);
+        var tenantId = tenantContext.TenantId!.Value;
+        var backgroundImageUrl = await dbContext.Menus
+            .AsNoTracking()
+            .Where(x => x.Id == id && x.TenantId == tenantId)
+            .Select(x => x.BackgroundImageUrl)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var result = await restaurantAdminService.DeleteMenuAsync(tenantId, id, cancellationToken);
+        if (result.Status == MenuMutationStatus.Success)
+        {
+            await DeleteMenuBackgroundImageIfUnusedAsync(tenantId, backgroundImageUrl, cancellationToken);
+        }
 
         return result.Status switch
         {
@@ -486,6 +494,76 @@ public class AdminRestaurantController(
             MenuCloneStatus.LimitReached => Conflict(new { Error = MenuCloneRules.FailureMessage(result.SourceName!, result.LimitProblems!) }),
             _ => StatusCode(StatusCodes.Status500InternalServerError)
         };
+    }
+
+    /// <summary>
+    /// Uploads the menu's background image and switches the menu's background to it. The previous image is
+    /// removed from R2 once no menu (e.g. a clone) uses it any more.
+    /// </summary>
+    [HttpPost("menus/{id:guid}/background-image")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> UploadMenuBackgroundImage(Guid id, IFormFile file, CancellationToken cancellationToken)
+    {
+        if (ValidateImageFile(file) is { } fileError)
+        {
+            return BadRequest(new { Error = fileError });
+        }
+
+        var tenantId = tenantContext.TenantId!.Value;
+        var menu = await dbContext.Menus.SingleOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, cancellationToken);
+        if (menu is null)
+        {
+            return NotFound(new { Error = "That menu could not be found. Refresh the page and try again." });
+        }
+
+        string url;
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            url = await r2StorageService.UploadImageAsync(
+                tenantId,
+                MenuBackgroundRules.NewImageType(menu.Id),
+                stream,
+                file.ContentType,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { Error = "Failed to upload image.", Details = ex.Message });
+        }
+
+        var previousUrl = menu.BackgroundImageUrl;
+        menu.BackgroundImageUrl = url;
+        menu.BackgroundStyle = MenuBackgroundRules.ImageStyle;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await DeleteMenuBackgroundImageIfUnusedAsync(tenantId, previousUrl, cancellationToken);
+        return Ok(new { url });
+    }
+
+    /// <summary>Clears the menu's background image (its background style is left as is).</summary>
+    [HttpDelete("menus/{id:guid}/background-image")]
+    [RequireTenantContext]
+    [RequireAdminAccess]
+    public async Task<IActionResult> DeleteMenuBackgroundImage(Guid id, CancellationToken cancellationToken)
+    {
+        var tenantId = tenantContext.TenantId!.Value;
+        var menu = await dbContext.Menus.SingleOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, cancellationToken);
+        if (menu is null)
+        {
+            return NotFound(new { Error = "That menu could not be found. Refresh the page and try again." });
+        }
+
+        var previousUrl = menu.BackgroundImageUrl;
+        if (previousUrl is not null)
+        {
+            menu.BackgroundImageUrl = null;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await DeleteMenuBackgroundImageIfUnusedAsync(tenantId, previousUrl, cancellationToken);
+        }
+
+        return NoContent();
     }
 
     [HttpPut("menus/reorder")]
@@ -665,6 +743,64 @@ public class AdminRestaurantController(
         if (description?.Length > MenuLimits.MaxDescriptionLength)
             return $"Menu description must be {MenuLimits.MaxDescriptionLength} characters or fewer.";
         return null;
+    }
+
+    /// <summary>
+    /// A color or pattern background has to come with its value; the image style may have no image yet (the
+    /// tenant uploads one next), which draws no background.
+    /// </summary>
+    private static string? ValidateMenuBackground(UpdateMenuRequest request)
+    {
+        if (MenuBackgroundRules.Validate(request.BackgroundStyle, request.BackgroundHexColor, request.BackgroundPattern) is { } error)
+            return error;
+        if (request.BackgroundStyle == MenuBackgroundRules.ColorStyle && request.BackgroundHexColor is null)
+            return "Pick a background color for the menu.";
+        if (request.BackgroundStyle == MenuBackgroundRules.PatternStyle && request.BackgroundPattern is null)
+            return "Pick a background pattern for the menu.";
+        return null;
+    }
+
+    private static string? ValidateImageFile(IFormFile? file)
+    {
+        if (file is null || file.Length == 0)
+            return "No file provided.";
+
+        var allowedContentTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "image/jpeg", "image/png" };
+        if (!allowedContentTypes.Contains(file.ContentType))
+            return "Only JPEG and PNG images are accepted.";
+
+        const long maxBytes = 10 * 1024 * 1024; // 10 MB
+        if (file.Length > maxBytes)
+            return "File size must not exceed 10 MB.";
+
+        return null;
+    }
+
+    /// <summary>
+    /// Removes a replaced or deleted menu background image from R2 unless another menu (a clone) still shows it.
+    /// Best effort: the menu change is already saved, and a leftover file only costs storage.
+    /// </summary>
+    private async Task DeleteMenuBackgroundImageIfUnusedAsync(Guid tenantId, string? url, CancellationToken cancellationToken)
+    {
+        if (MenuBackgroundRules.ImageTypeFromUrl(tenantId, url) is not { } imageType)
+        {
+            return;
+        }
+
+        var stillUsed = await dbContext.Menus.AnyAsync(x => x.TenantId == tenantId && x.BackgroundImageUrl == url, cancellationToken);
+        if (stillUsed)
+        {
+            return;
+        }
+
+        try
+        {
+            await r2StorageService.DeleteImageAsync(tenantId, imageType, cancellationToken);
+        }
+        catch (Exception)
+        {
+            // Ignored on purpose; see the summary.
+        }
     }
 
     private static bool IsSupportedBrandingImageType(string imageType) =>

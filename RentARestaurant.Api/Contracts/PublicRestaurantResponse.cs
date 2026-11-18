@@ -48,13 +48,33 @@ public sealed record PublicRestaurantResponse(
 /// <summary>
 /// The public storefront response only includes visible menus; the admin/agent snapshot includes all
 /// of them so a rollback never drops categories that sit in a hidden menu.
+/// The background values are always filled in by the API. BackgroundStyle is only null in an agent snapshot
+/// stored before menu backgrounds existed, which tells the rollback to leave the menu's background alone.
 /// </summary>
 public sealed record PublicMenuResponse(
     Guid Id,
     string Name,
     string Description,
     int SortOrder,
-    bool IsVisible);
+    bool IsVisible,
+    string? BackgroundStyle = null,
+    string? BackgroundImageUrl = null,
+    string? BackgroundHexColor = null,
+    string? BackgroundPattern = null,
+    bool ShowBackgroundOnSite = false)
+{
+    public static PublicMenuResponse From(Domain.Entities.Menu menu) => new(
+        menu.Id,
+        menu.Name,
+        menu.Description,
+        menu.SortOrder,
+        menu.IsVisible,
+        menu.BackgroundStyle,
+        menu.BackgroundImageUrl,
+        menu.BackgroundHexColor,
+        menu.BackgroundPattern,
+        menu.ShowBackgroundOnSite);
+}
 
 /// <summary>
 /// The hours that apply on one calendar date: that date's date-specific override, or else the

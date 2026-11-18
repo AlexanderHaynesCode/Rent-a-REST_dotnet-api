@@ -106,11 +106,19 @@ public sealed record CreateMenuRequest(
     string? Description = null,
     bool IsVisible = true);
 
+/// <summary>
+/// Each null background value keeps the menu's current one (the agent pipeline never sends them). The
+/// background image is only set through the menu background image upload/delete endpoints.
+/// </summary>
 public sealed record UpdateMenuRequest(
     string Name,
     string Description,
     int SortOrder,
-    bool IsVisible);
+    bool IsVisible,
+    string? BackgroundStyle = null,
+    string? BackgroundHexColor = null,
+    string? BackgroundPattern = null,
+    bool? ShowBackgroundOnSite = null);
 
 /// <summary>
 /// Copies a menu with all of its categories and items into a new menu. A null or blank Name means the next

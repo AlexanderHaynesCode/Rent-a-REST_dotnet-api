@@ -148,7 +148,7 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
             TopHoursOpenStatusDetail: profile.TopHoursOpenStatusDetail,
             DailyHours: dailyHours,
             Menus: menus
-                .Select(m => new PublicMenuResponse(m.Id, m.Name, m.Description, m.SortOrder, m.IsVisible))
+                .Select(PublicMenuResponse.From)
                 .ToList(),
             AllowMenuPdfDownload: profile.AllowMenuPdfDownload,
             ShowTopContactSection: profile.ShowTopContactSection,
