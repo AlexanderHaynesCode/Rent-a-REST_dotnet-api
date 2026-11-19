@@ -451,6 +451,12 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         menu.BackgroundHexColor = request.BackgroundHexColor ?? menu.BackgroundHexColor;
         menu.BackgroundPattern = request.BackgroundPattern ?? menu.BackgroundPattern;
         menu.ShowBackgroundOnSite = request.ShowBackgroundOnSite ?? menu.ShowBackgroundOnSite;
+        menu.TextShadowEnabled = request.TextShadowEnabled ?? menu.TextShadowEnabled;
+        menu.TextShadowOffsetX = request.TextShadowOffsetX ?? menu.TextShadowOffsetX;
+        menu.TextShadowOffsetY = request.TextShadowOffsetY ?? menu.TextShadowOffsetY;
+        menu.TextShadowBlur = request.TextShadowBlur ?? menu.TextShadowBlur;
+        menu.TextShadowHexColor = request.TextShadowHexColor ?? menu.TextShadowHexColor;
+        menu.ShowTextShadowOnSite = request.ShowTextShadowOnSite ?? menu.ShowTextShadowOnSite;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return new MenuMutationResult(MenuMutationStatus.Success, menuId);
@@ -551,7 +557,13 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             BackgroundImageUrl = source.BackgroundImageUrl,
             BackgroundHexColor = source.BackgroundHexColor,
             BackgroundPattern = source.BackgroundPattern,
-            ShowBackgroundOnSite = source.ShowBackgroundOnSite
+            ShowBackgroundOnSite = source.ShowBackgroundOnSite,
+            TextShadowEnabled = source.TextShadowEnabled,
+            TextShadowOffsetX = source.TextShadowOffsetX,
+            TextShadowOffsetY = source.TextShadowOffsetY,
+            TextShadowBlur = source.TextShadowBlur,
+            TextShadowHexColor = source.TextShadowHexColor,
+            ShowTextShadowOnSite = source.ShowTextShadowOnSite
         };
         dbContext.Menus.Add(menu);
 
@@ -1079,6 +1091,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 target.SortOrder = menu.SortOrder;
                 target.IsVisible = menu.IsVisible;
                 RestoreMenuBackground(target, menu);
+                RestoreMenuTextShadow(target, menu);
             }
         }
 
@@ -1165,5 +1178,24 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         target.BackgroundHexColor = snapshotMenu.BackgroundHexColor;
         target.BackgroundPattern = snapshotMenu.BackgroundPattern;
         target.ShowBackgroundOnSite = snapshotMenu.ShowBackgroundOnSite;
+    }
+
+    /// <summary>
+    /// A snapshot stored before menu text shadows existed has no TextShadowEnabled for its menus; the menu's
+    /// current text shadow is then left as is instead of being reset.
+    /// </summary>
+    private static void RestoreMenuTextShadow(Menu target, PublicMenuResponse snapshotMenu)
+    {
+        if (snapshotMenu.TextShadowEnabled is not { } enabled)
+        {
+            return;
+        }
+
+        target.TextShadowEnabled = enabled;
+        target.TextShadowOffsetX = snapshotMenu.TextShadowOffsetX;
+        target.TextShadowOffsetY = snapshotMenu.TextShadowOffsetY;
+        target.TextShadowBlur = snapshotMenu.TextShadowBlur;
+        target.TextShadowHexColor = snapshotMenu.TextShadowHexColor ?? MenuTextShadowRules.DefaultHexColor;
+        target.ShowTextShadowOnSite = snapshotMenu.ShowTextShadowOnSite;
     }
 }

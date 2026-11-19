@@ -425,10 +425,16 @@ public class AdminRestaurantController(
             Description = request.Description.Trim(),
             BackgroundStyle = NullIfBlank(request.BackgroundStyle),
             BackgroundHexColor = NullIfBlank(request.BackgroundHexColor),
-            BackgroundPattern = NullIfBlank(request.BackgroundPattern)
+            BackgroundPattern = NullIfBlank(request.BackgroundPattern),
+            TextShadowHexColor = NullIfBlank(request.TextShadowHexColor)
         };
         var error = ValidateMenuFields(trimmedRequest.Name, trimmedRequest.Description)
-            ?? ValidateMenuBackground(trimmedRequest);
+            ?? ValidateMenuBackground(trimmedRequest)
+            ?? MenuTextShadowRules.Validate(
+                trimmedRequest.TextShadowOffsetX,
+                trimmedRequest.TextShadowOffsetY,
+                trimmedRequest.TextShadowBlur,
+                trimmedRequest.TextShadowHexColor);
         if (error is not null)
         {
             return BadRequest(new { Error = error });

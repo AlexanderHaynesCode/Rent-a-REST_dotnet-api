@@ -130,6 +130,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.BackgroundHexColor).HasColumnName("background_hex_color").HasMaxLength(12);
             entity.Property(x => x.BackgroundPattern).HasColumnName("background_pattern").HasMaxLength(30);
             entity.Property(x => x.ShowBackgroundOnSite).HasColumnName("show_background_on_site");
+            entity.Property(x => x.TextShadowEnabled).HasColumnName("text_shadow_enabled");
+            entity.Property(x => x.TextShadowOffsetX).HasColumnName("text_shadow_offset_x");
+            entity.Property(x => x.TextShadowOffsetY).HasColumnName("text_shadow_offset_y");
+            entity.Property(x => x.TextShadowBlur).HasColumnName("text_shadow_blur");
+            entity.Property(x => x.TextShadowHexColor).HasColumnName("text_shadow_hex_color").HasMaxLength(12);
+            entity.Property(x => x.ShowTextShadowOnSite).HasColumnName("show_text_shadow_on_site");
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.Menus)
                 .HasForeignKey(x => x.TenantId)

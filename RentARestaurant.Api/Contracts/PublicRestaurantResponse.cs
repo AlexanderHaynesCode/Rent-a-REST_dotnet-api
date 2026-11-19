@@ -1,3 +1,5 @@
+using RentARestaurant.Api.Domain;
+
 namespace RentARestaurant.Api.Contracts;
 
 public sealed record PublicRestaurantResponse(
@@ -48,8 +50,9 @@ public sealed record PublicRestaurantResponse(
 /// <summary>
 /// The public storefront response only includes visible menus; the admin/agent snapshot includes all
 /// of them so a rollback never drops categories that sit in a hidden menu.
-/// The background values are always filled in by the API. BackgroundStyle is only null in an agent snapshot
-/// stored before menu backgrounds existed, which tells the rollback to leave the menu's background alone.
+/// The background and text shadow values are always filled in by the API. BackgroundStyle is only null in an
+/// agent snapshot stored before menu backgrounds existed, which tells the rollback to leave the menu's background
+/// alone; TextShadowEnabled does the same for snapshots stored before menu text shadows existed.
 /// </summary>
 public sealed record PublicMenuResponse(
     Guid Id,
@@ -61,7 +64,13 @@ public sealed record PublicMenuResponse(
     string? BackgroundImageUrl = null,
     string? BackgroundHexColor = null,
     string? BackgroundPattern = null,
-    bool ShowBackgroundOnSite = false)
+    bool ShowBackgroundOnSite = false,
+    bool? TextShadowEnabled = null,
+    int TextShadowOffsetX = MenuTextShadowRules.DefaultOffsetX,
+    int TextShadowOffsetY = MenuTextShadowRules.DefaultOffsetY,
+    int TextShadowBlur = MenuTextShadowRules.DefaultBlur,
+    string? TextShadowHexColor = MenuTextShadowRules.DefaultHexColor,
+    bool ShowTextShadowOnSite = false)
 {
     public static PublicMenuResponse From(Domain.Entities.Menu menu) => new(
         menu.Id,
@@ -73,7 +82,13 @@ public sealed record PublicMenuResponse(
         menu.BackgroundImageUrl,
         menu.BackgroundHexColor,
         menu.BackgroundPattern,
-        menu.ShowBackgroundOnSite);
+        menu.ShowBackgroundOnSite,
+        menu.TextShadowEnabled,
+        menu.TextShadowOffsetX,
+        menu.TextShadowOffsetY,
+        menu.TextShadowBlur,
+        menu.TextShadowHexColor,
+        menu.ShowTextShadowOnSite);
 }
 
 /// <summary>

@@ -444,12 +444,21 @@ CREATE TABLE menus (
     background_hex_color VARCHAR(12),
     background_pattern VARCHAR(30),
     show_background_on_site BOOLEAN NOT NULL DEFAULT FALSE,
+    text_shadow_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    text_shadow_offset_x INTEGER NOT NULL DEFAULT 2,
+    text_shadow_offset_y INTEGER NOT NULL DEFAULT 2,
+    text_shadow_blur INTEGER NOT NULL DEFAULT 0,
+    text_shadow_hex_color VARCHAR(12) NOT NULL DEFAULT '#FFFFFF',
+    show_text_shadow_on_site BOOLEAN NOT NULL DEFAULT FALSE,
 
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     UNIQUE(tenant_id, name),
     CONSTRAINT name_not_empty CHECK (name != ''),
     CONSTRAINT menus_background_style_values CHECK (background_style IN ('none', 'image', 'color', 'pattern')),
-    CONSTRAINT hex_color_format_menu_background CHECK (background_hex_color IS NULL OR background_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$')
+    CONSTRAINT hex_color_format_menu_background CHECK (background_hex_color IS NULL OR background_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
+    CONSTRAINT menus_text_shadow_offset_range CHECK (text_shadow_offset_x BETWEEN -10 AND 10 AND text_shadow_offset_y BETWEEN -10 AND 10),
+    CONSTRAINT menus_text_shadow_blur_range CHECK (text_shadow_blur BETWEEN 0 AND 20),
+    CONSTRAINT hex_color_format_menu_text_shadow CHECK (text_shadow_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$')
 );
 
 CREATE INDEX idx_menus_sort_order ON menus(tenant_id, sort_order);
@@ -530,6 +539,23 @@ ADD COLUMN IF NOT EXISTS show_background_on_site BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE menus
 ADD CONSTRAINT menus_background_style_values CHECK (background_style IN ('none', 'image', 'color', 'pattern')),
 ADD CONSTRAINT hex_color_format_menu_background CHECK (background_hex_color IS NULL OR background_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$');
+```
+
+**For existing databases, add menu text shadows (set on the admin portal's Menus page when editing a menu, right above "Menu background").** Each menu can draw a CSS `text-shadow: {text_shadow_offset_x}px {text_shadow_offset_y}px {text_shadow_blur}px {text_shadow_hex_color}` on its text. The admin portal draws it while `text_shadow_enabled` is TRUE; the restaurant site only draws it on that menu's categories and items while `show_text_shadow_on_site` is TRUE too. Both default to FALSE, so existing sites look the same. The four values default to `2px 2px 0px #FFFFFF` and are kept while the shadow is off, so turning it back on restores them. The offsets allow -10 to 10 pixels and the blur 0 to 20 (whole pixels); the API checks the same ranges. Run this before deploying the API, since EF selects all six columns. Safe to re-run except for the constraints, which fail if they already exist:
+
+```sql
+ALTER TABLE menus
+ADD COLUMN IF NOT EXISTS text_shadow_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS text_shadow_offset_x INTEGER NOT NULL DEFAULT 2,
+ADD COLUMN IF NOT EXISTS text_shadow_offset_y INTEGER NOT NULL DEFAULT 2,
+ADD COLUMN IF NOT EXISTS text_shadow_blur INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN IF NOT EXISTS text_shadow_hex_color VARCHAR(12) NOT NULL DEFAULT '#FFFFFF',
+ADD COLUMN IF NOT EXISTS show_text_shadow_on_site BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE menus
+ADD CONSTRAINT menus_text_shadow_offset_range CHECK (text_shadow_offset_x BETWEEN -10 AND 10 AND text_shadow_offset_y BETWEEN -10 AND 10),
+ADD CONSTRAINT menus_text_shadow_blur_range CHECK (text_shadow_blur BETWEEN 0 AND 20),
+ADD CONSTRAINT hex_color_format_menu_text_shadow CHECK (text_shadow_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$');
 ```
 
 ---
@@ -756,11 +782,20 @@ CREATE TABLE menus (
     background_hex_color VARCHAR(12),
     background_pattern VARCHAR(30),
     show_background_on_site BOOLEAN NOT NULL DEFAULT FALSE,
+    text_shadow_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    text_shadow_offset_x INTEGER NOT NULL DEFAULT 2,
+    text_shadow_offset_y INTEGER NOT NULL DEFAULT 2,
+    text_shadow_blur INTEGER NOT NULL DEFAULT 0,
+    text_shadow_hex_color VARCHAR(12) NOT NULL DEFAULT '#FFFFFF',
+    show_text_shadow_on_site BOOLEAN NOT NULL DEFAULT FALSE,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     UNIQUE(tenant_id, name),
     CONSTRAINT name_not_empty CHECK (name != ''),
     CONSTRAINT menus_background_style_values CHECK (background_style IN ('none', 'image', 'color', 'pattern')),
-    CONSTRAINT hex_color_format_menu_background CHECK (background_hex_color IS NULL OR background_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$')
+    CONSTRAINT hex_color_format_menu_background CHECK (background_hex_color IS NULL OR background_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
+    CONSTRAINT menus_text_shadow_offset_range CHECK (text_shadow_offset_x BETWEEN -10 AND 10 AND text_shadow_offset_y BETWEEN -10 AND 10),
+    CONSTRAINT menus_text_shadow_blur_range CHECK (text_shadow_blur BETWEEN 0 AND 20),
+    CONSTRAINT hex_color_format_menu_text_shadow CHECK (text_shadow_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$')
 );
 
 CREATE INDEX idx_menus_sort_order ON menus(tenant_id, sort_order);

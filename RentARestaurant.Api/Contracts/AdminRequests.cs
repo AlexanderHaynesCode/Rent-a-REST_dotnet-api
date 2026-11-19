@@ -107,8 +107,8 @@ public sealed record CreateMenuRequest(
     bool IsVisible = true);
 
 /// <summary>
-/// Each null background value keeps the menu's current one (the agent pipeline never sends them). The
-/// background image is only set through the menu background image upload/delete endpoints.
+/// Each null background or text shadow value keeps the menu's current one (the agent pipeline never sends
+/// them). The background image is only set through the menu background image upload/delete endpoints.
 /// </summary>
 public sealed record UpdateMenuRequest(
     string Name,
@@ -118,7 +118,13 @@ public sealed record UpdateMenuRequest(
     string? BackgroundStyle = null,
     string? BackgroundHexColor = null,
     string? BackgroundPattern = null,
-    bool? ShowBackgroundOnSite = null);
+    bool? ShowBackgroundOnSite = null,
+    bool? TextShadowEnabled = null,
+    int? TextShadowOffsetX = null,
+    int? TextShadowOffsetY = null,
+    int? TextShadowBlur = null,
+    string? TextShadowHexColor = null,
+    bool? ShowTextShadowOnSite = null);
 
 /// <summary>
 /// Copies a menu with all of its categories and items into a new menu. A null or blank Name means the next

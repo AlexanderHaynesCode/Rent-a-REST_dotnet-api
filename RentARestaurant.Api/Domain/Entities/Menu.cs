@@ -28,11 +28,17 @@ public class Menu : ITenantEntity
 
     public string? BackgroundHexColor { get; set; }
 
-    /// <summary>One of <see cref="MenuBackgroundRules.Patterns"/>, or null when none was picked.</summary>
     public string? BackgroundPattern { get; set; }
 
-    /// <summary>The admin portal always shows the background; the restaurant site only while this is on.</summary>
     public bool ShowBackgroundOnSite { get; set; }
+
+    public bool TextShadowEnabled { get; set; }
+
+    public int TextShadowOffsetX { get; set; } = MenuTextShadowRules.DefaultOffsetX;
+    public int TextShadowOffsetY { get; set; } = MenuTextShadowRules.DefaultOffsetY;
+    public int TextShadowBlur { get; set; } = MenuTextShadowRules.DefaultBlur;
+    public string TextShadowHexColor { get; set; } = MenuTextShadowRules.DefaultHexColor;
+    public bool ShowTextShadowOnSite { get; set; }
 
     public Tenant Tenant { get; set; } = null!;
     public ICollection<MenuCategory> Categories { get; set; } = new List<MenuCategory>();
