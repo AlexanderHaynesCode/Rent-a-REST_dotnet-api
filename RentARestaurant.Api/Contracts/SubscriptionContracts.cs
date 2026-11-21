@@ -12,7 +12,10 @@ public sealed record AdminSubscriptionResponse(
     string? BillingStatus = null,
     bool CancelAtPeriodEnd = false,
     DateTime? CurrentPeriodEndUtc = null,
-    DateTime? GraceEndsUtc = null);
+    DateTime? GraceEndsUtc = null,
+    string? RegisteredEmail = null,
+    // Where Done-For-You update requests are sent; null on other plans.
+    string? UpdateRequestEmail = null);
 
 public sealed record PaymentRecoveryInfoResponse(
     string TenantName,

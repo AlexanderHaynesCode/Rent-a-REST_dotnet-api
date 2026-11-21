@@ -4,7 +4,7 @@ namespace RentARestaurant.Api.Services;
 
 public interface ISubscriptionService
 {
-    Task<AdminSubscriptionResponse> GetCurrentAsync(CancellationToken cancellationToken);
+    Task<AdminSubscriptionResponse> GetCurrentAsync(string externalUserId, CancellationToken cancellationToken);
 
     Task<PreviewSubscriptionChangeResponse> PreviewChangeAsync(string targetPlan, CancellationToken cancellationToken);
 

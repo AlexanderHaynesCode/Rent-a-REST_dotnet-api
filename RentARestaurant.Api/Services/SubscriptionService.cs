@@ -17,6 +17,7 @@ public sealed class SubscriptionService(
     ITenantAccessService tenantAccessService,
     IOptions<StripeOptions> stripeOptions,
     IOptions<AdminOptions> adminOptions,
+    IOptions<EmailOptions> emailOptions,
     IEmailService emailService,
     ILogger<SubscriptionService> logger) : ISubscriptionService
 {
@@ -26,10 +27,22 @@ public sealed class SubscriptionService(
     private const string Reactivate = "reactivate";
     private const string Active = "active";
 
-    public async Task<AdminSubscriptionResponse> GetCurrentAsync(CancellationToken cancellationToken)
+    public async Task<AdminSubscriptionResponse> GetCurrentAsync(string externalUserId, CancellationToken cancellationToken)
     {
         var tenant = await LoadTenantAsync(cancellationToken);
         var row = await LoadSubscriptionRowAsync(tenant.Id, cancellationToken);
+
+        // Tenant-scoped by the query filter. This is the address agent-imap-adapter-service matches senders against,
+        // which is not kept in sync with the user's Clerk email.
+        var registeredEmail = await dbContext.TenantUsers
+            .AsNoTracking()
+            .Where(x => x.ExternalUserId == externalUserId)
+            .Select(x => x.Email)
+            .FirstOrDefaultAsync(cancellationToken);
+        var updateRequestEmail = tenant.SubscriptionPlan == SubscriptionPlans.DoneForYou
+            && !string.IsNullOrWhiteSpace(emailOptions.Value.AgentReplyTo)
+                ? emailOptions.Value.AgentReplyTo.Trim()
+                : null;
 
         return new AdminSubscriptionResponse(
             tenant.SubscriptionPlan,
@@ -41,7 +54,9 @@ public sealed class SubscriptionService(
             row?.Status,
             row?.CancelAtPeriodEnd ?? false,
             row?.CurrentPeriodEndUtc,
-            row?.GraceEndsUtc);
+            row?.GraceEndsUtc,
+            string.IsNullOrWhiteSpace(registeredEmail) ? null : registeredEmail.Trim(),
+            updateRequestEmail);
     }
 
     public async Task<SetSubscriptionCancellationResponse> SetCancellationAsync(bool cancelAtPeriodEnd, CancellationToken cancellationToken)
