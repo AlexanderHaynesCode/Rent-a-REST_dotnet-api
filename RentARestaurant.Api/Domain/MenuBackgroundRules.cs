@@ -21,6 +21,21 @@ public static class MenuBackgroundRules
         "gingham", "subway-tile", "terrazzo", "parchment", "linen-paper", "watercolor-paper", "handmade-paper",
     ];
 
+    /// <summary>The names the admin portal shows for <see cref="Patterns"/> (MENU_BACKGROUND_PATTERNS there).</summary>
+    private static readonly IReadOnlyDictionary<string, string> PatternLabels = new Dictionary<string, string>
+    {
+        ["gingham"] = "Gingham tablecloth",
+        ["subway-tile"] = "Subway tile",
+        ["terrazzo"] = "Terrazzo",
+        ["parchment"] = "Parchment paper",
+        ["linen-paper"] = "Linen paper",
+        ["watercolor-paper"] = "Watercolor paper",
+        ["handmade-paper"] = "Handmade paper",
+    };
+
+    public static string PatternLabel(string? pattern) =>
+        pattern is not null && PatternLabels.TryGetValue(pattern, out var label) ? label : pattern ?? "pattern";
+
     private const string ImageTypePrefix = "menu-background-";
 
     /// <summary>

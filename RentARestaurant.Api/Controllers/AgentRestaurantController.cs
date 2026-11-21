@@ -317,7 +317,9 @@ public class AgentRestaurantController(
     /// <summary>
     /// Stores an email-attached image under a unique R2 key and returns its URL without touching the profile,
     /// so the live site only changes once the URL passes validation and is applied. The "attachment" type stages
-    /// an image while the tenant is still being asked which attached file is their logo/hero.
+    /// an image while the tenant is still being asked which attached file is their logo/hero. A "menu-background"
+    /// key starts like the admin portal's menu background images, so the admin portal can clean it up once no
+    /// menu uses it.
     /// </summary>
     [HttpPost("images/{imageType}")]
     [RequestSizeLimit(MaxImageBytes + 1024 * 1024)]
@@ -327,9 +329,9 @@ public class AgentRestaurantController(
         CancellationToken cancellationToken)
     {
         var normalizedImageType = imageType.Trim().ToLowerInvariant();
-        if (normalizedImageType is not ("logo" or "hero" or "custom-background" or "attachment"))
+        if (normalizedImageType is not ("logo" or "hero" or "custom-background" or "menu-background" or "attachment"))
         {
-            return BadRequest(new { Error = "imageType must be one of: logo, hero, custom-background, attachment." });
+            return BadRequest(new { Error = "imageType must be one of: logo, hero, custom-background, menu-background, attachment." });
         }
 
         var tenantId = tenantContext.TenantId!.Value;
@@ -794,6 +796,10 @@ public class AgentRestaurantController(
                     summary.Add(change.IsVisible == false
                         ? $"Created the menu '{name}' (hidden from your site)."
                         : $"Created the menu '{name}'.");
+                    if (change.HasStyleFields)
+                    {
+                        await ApplyMenuStyleAsync(tenantId, created.Id.Value, change, summary, rejected, cancellationToken);
+                    }
                     break;
                 case MenuMutationStatus.LimitReached:
                     context.SkippedMenuNames.Add(name);
@@ -819,39 +825,19 @@ public class AgentRestaurantController(
 
         if (action == AgentItemAction.Update)
         {
-            var merged = new UpdateMenuRequest(
-                name ?? current.Name,
-                description ?? current.Description,
-                change.SortOrder ?? current.SortOrder,
-                change.IsVisible ?? current.IsVisible);
-            var updated = await restaurantAdminService.UpdateMenuAsync(tenantId, current.Id, merged, cancellationToken);
-            if (updated.Status == MenuMutationStatus.DuplicateName)
+            // A background/text-shadow-only change leaves the rest of the menu alone (and isn't reported as
+            // "Updated the menu"); a change with nothing at all in it keeps reporting that, as before.
+            var changesMenuFields = name is not null || description is not null || change.SortOrder is not null || change.IsVisible is not null;
+            if (changesMenuFields || !change.HasStyleFields)
             {
-                rejected.Add($"Skipped renaming the menu '{current.Name}' to '{merged.Name}' - a menu with that name already exists.");
-                return;
+                await ApplyMenuFieldsUpdateAsync(tenantId, current, name, description, change, summary, rejected, cancellationToken);
             }
 
-            if (updated.Status != MenuMutationStatus.Success)
+            if (change.HasStyleFields)
             {
-                rejected.Add($"The menu '{current.Name}' could not be updated.");
-                return;
+                await ApplyMenuStyleAsync(tenantId, current.Id, change, summary, rejected, cancellationToken);
             }
 
-            var lines = new List<string>();
-            if (merged.Name != current.Name) lines.Add($"Renamed the menu '{current.Name}' to '{merged.Name}'.");
-            if (merged.IsVisible != current.IsVisible)
-            {
-                lines.Add(merged.IsVisible
-                    ? $"Made the menu '{merged.Name}' visible on your site."
-                    : $"Hid the menu '{merged.Name}' from your site.");
-            }
-
-            if (merged.Description != current.Description || merged.SortOrder != current.SortOrder || lines.Count == 0)
-            {
-                lines.Add($"Updated the menu '{merged.Name}'.");
-            }
-
-            summary.AddRange(lines);
             return;
         }
 
@@ -881,6 +867,190 @@ public class AgentRestaurantController(
         else
         {
             rejected.Add($"The menu '{current.Name}' could not be deleted.");
+        }
+    }
+
+    /// <summary>Renames, re-describes, re-orders or shows/hides the menu <paramref name="current"/>.</summary>
+    private async Task ApplyMenuFieldsUpdateAsync(
+        Guid tenantId,
+        Menu current,
+        string? name,
+        string? description,
+        AgentMenuChange change,
+        List<string> summary,
+        List<string> rejected,
+        CancellationToken cancellationToken)
+    {
+        var merged = new UpdateMenuRequest(
+            name ?? current.Name,
+            description ?? current.Description,
+            change.SortOrder ?? current.SortOrder,
+            change.IsVisible ?? current.IsVisible);
+        var updated = await restaurantAdminService.UpdateMenuAsync(tenantId, current.Id, merged, cancellationToken);
+        if (updated.Status == MenuMutationStatus.DuplicateName)
+        {
+            rejected.Add($"Skipped renaming the menu '{current.Name}' to '{merged.Name}' - a menu with that name already exists.");
+            return;
+        }
+
+        if (updated.Status != MenuMutationStatus.Success)
+        {
+            rejected.Add($"The menu '{current.Name}' could not be updated.");
+            return;
+        }
+
+        var lines = new List<string>();
+        if (merged.Name != current.Name) lines.Add($"Renamed the menu '{current.Name}' to '{merged.Name}'.");
+        if (merged.IsVisible != current.IsVisible)
+        {
+            lines.Add(merged.IsVisible
+                ? $"Made the menu '{merged.Name}' visible on your site."
+                : $"Hid the menu '{merged.Name}' from your site.");
+        }
+
+        if (merged.Description != current.Description || merged.SortOrder != current.SortOrder || lines.Count == 0)
+        {
+            lines.Add($"Updated the menu '{merged.Name}'.");
+        }
+
+        summary.AddRange(lines);
+    }
+
+    /// <summary>
+    /// Applies a menu change's background and text shadow fields (the admin portal's "Add a background to this
+    /// menu" and "Add a text shadow to this menu's text") to the menu <paramref name="menuId"/>: an existing menu,
+    /// or one the same change just created or copied. Settings the tenant didn't mention are implied so a change is
+    /// never invisible: a new image, color or pattern picks its background style, a shadow value turns the shadow
+    /// on, and a changed background or shadow is shown on the site. An explicit value from the tenant always wins.
+    /// The background and the text shadow are checked separately, so a problem with one doesn't block the other.
+    /// </summary>
+    private async Task ApplyMenuStyleAsync(
+        Guid tenantId,
+        Guid menuId,
+        AgentMenuChange change,
+        List<string> summary,
+        List<string> rejected,
+        CancellationToken cancellationToken)
+    {
+        var before = await dbContext.Menus.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == menuId && x.TenantId == tenantId, cancellationToken);
+        if (before is null)
+        {
+            return;
+        }
+
+        var rejectedBefore = rejected.Count;
+
+        // Background. Image URL: null leaves the image as is, blank removes it, anything else must be an http(s) URL.
+        string? backgroundError = null;
+        var imageUrl = before.BackgroundImageUrl;
+        var newImage = false;
+        if (change.BackgroundImageUrl is { } requestedImage)
+        {
+            var trimmed = requestedImage.Trim();
+            if (trimmed.Length == 0)
+            {
+                imageUrl = null;
+            }
+            else if (IsHttpUrl(trimmed))
+            {
+                newImage = trimmed != before.BackgroundImageUrl;
+                imageUrl = trimmed;
+            }
+            else
+            {
+                backgroundError = "We couldn't find the image you attached for it.";
+            }
+        }
+
+        var requestedStyle = NullIfBlank(change.BackgroundStyle)?.ToLowerInvariant();
+        var hexColor = NullIfBlank(change.BackgroundHexColor);
+        var pattern = NullIfBlank(change.BackgroundPattern)?.ToLowerInvariant();
+        var style = requestedStyle
+            ?? (newImage ? MenuBackgroundRules.ImageStyle
+                : hexColor is not null ? MenuBackgroundRules.ColorStyle
+                : pattern is not null ? MenuBackgroundRules.PatternStyle
+                : before.BackgroundStyle);
+
+        backgroundError ??= MenuBackgroundRules.Validate(style, hexColor, pattern);
+        if (backgroundError is null && style != before.BackgroundStyle)
+        {
+            // A newly picked style needs its value, already stored or sent with it (the admin portal's form
+            // always sends the picker's color/pattern).
+            if (style == MenuBackgroundRules.ColorStyle && (hexColor ?? before.BackgroundHexColor) is null)
+                backgroundError = "No color has been chosen for it yet.";
+            else if (style == MenuBackgroundRules.PatternStyle && (pattern ?? before.BackgroundPattern) is null)
+                backgroundError = "No pattern has been chosen for it yet.";
+            else if (style == MenuBackgroundRules.ImageStyle && imageUrl is null)
+                backgroundError = "It doesn't have an image yet, so please reply with the image attached.";
+        }
+
+        var backgroundTouched = (requestedStyle is not null && requestedStyle != MenuBackgroundRules.NoneStyle)
+            || hexColor is not null || pattern is not null || newImage;
+        var showBackground = change.ShowBackgroundOnSite
+            ?? ((backgroundTouched && style != MenuBackgroundRules.NoneStyle) || before.ShowBackgroundOnSite);
+
+        if (backgroundError is not null)
+        {
+            rejected.Add($"The background of the menu '{before.Name}' was not changed. {backgroundError}");
+        }
+
+        // Text shadow.
+        var shadowColor = NullIfBlank(change.TextShadowHexColor);
+        var shadowError = MenuTextShadowRules.Validate(change.TextShadowOffsetX, change.TextShadowOffsetY, change.TextShadowBlur, shadowColor);
+        var shadowValuesSent = change.TextShadowOffsetX is not null || change.TextShadowOffsetY is not null
+            || change.TextShadowBlur is not null || shadowColor is not null;
+        var shadowEnabled = change.TextShadowEnabled ?? (shadowValuesSent || before.TextShadowEnabled);
+        var shadowTouched = change.TextShadowEnabled == true || shadowValuesSent;
+        var showShadow = change.ShowTextShadowOnSite ?? ((shadowTouched && shadowEnabled) || before.ShowTextShadowOnSite);
+
+        if (shadowError is not null)
+        {
+            rejected.Add($"The text shadow of the menu '{before.Name}' was not changed. {shadowError}");
+        }
+
+        var applyBackground = backgroundError is null && change.HasBackgroundFields;
+        var applyShadow = shadowError is null && change.HasTextShadowFields;
+        if (applyBackground || applyShadow)
+        {
+            var request = new UpdateMenuRequest(
+                before.Name,
+                before.Description,
+                before.SortOrder,
+                before.IsVisible,
+                BackgroundStyle: applyBackground ? style : null,
+                BackgroundHexColor: applyBackground ? hexColor : null,
+                BackgroundPattern: applyBackground ? pattern : null,
+                ShowBackgroundOnSite: applyBackground ? showBackground : null,
+                TextShadowEnabled: applyShadow ? shadowEnabled : null,
+                TextShadowOffsetX: applyShadow ? change.TextShadowOffsetX : null,
+                TextShadowOffsetY: applyShadow ? change.TextShadowOffsetY : null,
+                TextShadowBlur: applyShadow ? change.TextShadowBlur : null,
+                TextShadowHexColor: applyShadow ? shadowColor : null,
+                ShowTextShadowOnSite: applyShadow ? showShadow : null);
+            var updated = await restaurantAdminService.UpdateMenuAsync(tenantId, menuId, request, cancellationToken);
+            if (updated.Status != MenuMutationStatus.Success)
+            {
+                rejected.Add($"The background and text shadow of the menu '{before.Name}' could not be changed.");
+                return;
+            }
+
+            // The image is not part of a menu update (the admin portal sets it on upload). The old image stays in
+            // storage so this change can still be rolled back.
+            if (applyBackground && imageUrl != before.BackgroundImageUrl)
+            {
+                await restaurantAdminService.SetMenuBackgroundImageUrlAsync(tenantId, menuId, imageUrl, cancellationToken);
+            }
+        }
+
+        var after = await dbContext.Menus.AsNoTracking()
+            .SingleAsync(x => x.Id == menuId && x.TenantId == tenantId, cancellationToken);
+        var lines = MenuStyleChangeSummary.Describe(before, after);
+        summary.AddRange(lines);
+
+        if (lines.Count == 0 && rejected.Count == rejectedBefore)
+        {
+            rejected.Add($"The background and text shadow settings you asked for on the menu '{after.Name}' already match your site, so they were not changed.");
         }
     }
 
@@ -941,6 +1111,10 @@ public class AgentRestaurantController(
                 summary.Add(
                     $"Copied the menu '{result.SourceName}' to a new menu '{clone.Menu.Name}' with its " +
                     $"{clone.Categories.Count} category(ies) and {itemCount} item(s){hidden}.");
+                if (change.HasStyleFields)
+                {
+                    await ApplyMenuStyleAsync(tenantId, clone.Menu.Id, change, summary, rejected, cancellationToken);
+                }
                 break;
             case MenuCloneStatus.LimitReached:
                 rejected.Add($"Skipped copying the menu '{result.SourceName}'. {string.Join(" ", result.LimitProblems!)}");

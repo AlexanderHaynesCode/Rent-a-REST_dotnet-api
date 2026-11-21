@@ -23,7 +23,10 @@ public class Menu : ITenantEntity
     /// </summary>
     public string BackgroundStyle { get; set; } = MenuBackgroundRules.NoneStyle;
 
-    /// <summary>Only set by the admin menu background image upload/delete endpoints (and clone/rollback).</summary>
+    /// <summary>
+    /// Only set by the admin menu background image upload/delete endpoints, an agent-applied email change, and
+    /// clone/rollback.
+    /// </summary>
     public string? BackgroundImageUrl { get; set; }
 
     public string? BackgroundHexColor { get; set; }

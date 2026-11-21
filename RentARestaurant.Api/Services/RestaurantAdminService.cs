@@ -100,6 +100,12 @@ public interface IRestaurantAdminService
     Task<bool> SetCustomBackgroundImageUrlAsync(Guid tenantId, string? url, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Sets a menu's background image URL, which menu updates never touch. Null removes it. The previous image is
+    /// left in storage (an agent change can still be rolled back to it).
+    /// </summary>
+    Task<bool> SetMenuBackgroundImageUrlAsync(Guid tenantId, Guid menuId, string? url, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reconciles the current DB state back to a previously captured snapshot (used for agent-change rollback).
     /// <paramref name="presentKeys"/> holds the top-level property names found in the stored snapshot JSON
     /// (compared ignoring case): a setting added after the snapshot was taken is missing from it and is left
@@ -858,6 +864,22 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
 
         profile.CustomBackgroundImageUrl = url;
         profile.UpdatedUtc = DateTime.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> SetMenuBackgroundImageUrlAsync(Guid tenantId, Guid menuId, string? url, CancellationToken cancellationToken)
+    {
+        var menu = await dbContext.Menus
+            .SingleOrDefaultAsync(x => x.Id == menuId && x.TenantId == tenantId, cancellationToken);
+
+        if (menu is null)
+        {
+            return false;
+        }
+
+        menu.BackgroundImageUrl = url;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return true;

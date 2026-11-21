@@ -13,6 +13,14 @@ public enum AgentItemAction
 /// question). A "clone" copies the menu MenuId, with all of its categories and items, into a new menu called Name
 /// (null: "<menu name>_copy"). The copy starts hidden unless IsVisible is true; Description and SortOrder
 /// override the copied values when set.
+/// <para>
+/// The background and text shadow fields (the admin portal's "Add a background to this menu" and "Add a text
+/// shadow to this menu's text") apply to an update, a new menu and a copy; null keeps the current value.
+/// BackgroundStyle is one of <see cref="Domain.MenuBackgroundRules.Styles"/>; when it is null, a new image URL,
+/// color or pattern picks its own style. BackgroundImageUrl is the URL of an image uploaded through the
+/// "menu-background" image type (blank removes it). A changed background or text shadow is also shown on the site
+/// unless ShowBackgroundOnSite / ShowTextShadowOnSite says otherwise.
+/// </para>
 /// </summary>
 public sealed record AgentMenuChange(
     string Action,
@@ -21,7 +29,29 @@ public sealed record AgentMenuChange(
     string? Description = null,
     int? SortOrder = null,
     bool? IsVisible = null,
-    bool? DeleteConfirmed = null);
+    bool? DeleteConfirmed = null,
+    string? BackgroundStyle = null,
+    string? BackgroundHexColor = null,
+    string? BackgroundPattern = null,
+    string? BackgroundImageUrl = null,
+    bool? ShowBackgroundOnSite = null,
+    bool? TextShadowEnabled = null,
+    int? TextShadowOffsetX = null,
+    int? TextShadowOffsetY = null,
+    int? TextShadowBlur = null,
+    string? TextShadowHexColor = null,
+    bool? ShowTextShadowOnSite = null)
+{
+    public bool HasBackgroundFields =>
+        BackgroundStyle is not null || BackgroundHexColor is not null || BackgroundPattern is not null
+        || BackgroundImageUrl is not null || ShowBackgroundOnSite is not null;
+
+    public bool HasTextShadowFields =>
+        TextShadowEnabled is not null || TextShadowOffsetX is not null || TextShadowOffsetY is not null
+        || TextShadowBlur is not null || TextShadowHexColor is not null || ShowTextShadowOnSite is not null;
+
+    public bool HasStyleFields => HasBackgroundFields || HasTextShadowFields;
+}
 
 /// <summary>
 /// MenuId picks an existing menu (on an update it moves the category); MenuName picks a menu by name,
