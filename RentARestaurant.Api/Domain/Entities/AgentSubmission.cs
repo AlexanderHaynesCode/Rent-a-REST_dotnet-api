@@ -35,7 +35,7 @@ public class AgentSubmission : ITenantEntity
 
     public AgentSubmissionStatus Status { get; set; } = AgentSubmissionStatus.Received;
 
-    /// <summary>Structured JSON produced by the translator LLM (Groq/Llama).</summary>
+    /// <summary>Structured JSON produced by the translator LLM (gpt-oss-120b via OpenRouter).</summary>
     public string? TranslatedJson { get; set; }
 
     /// <summary>Confidence score (0-1) produced by the validator LLM (Claude Haiku).</summary>
