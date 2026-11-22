@@ -9,7 +9,12 @@ namespace RentARestaurant.Api.Services;
 /// </summary>
 public static class ProfileChangeSummary
 {
-    public static List<string> Describe(RestaurantProfile before, RestaurantProfile after)
+    private const int MaxFileNameLength = 120;
+
+    public static List<string> Describe(
+        RestaurantProfile before,
+        RestaurantProfile after,
+        IReadOnlyDictionary<string, string>? imageFileNames = null)
     {
         var lines = new List<string>();
 
@@ -22,7 +27,14 @@ public static class ProfileChangeSummary
         void Image(string? oldValue, string? newValue, string label)
         {
             if (Same(oldValue, newValue)) return;
-            lines.Add(string.IsNullOrWhiteSpace(newValue) ? $"Removed the {label}." : $"Updated the {label}.");
+            if (string.IsNullOrWhiteSpace(newValue))
+            {
+                lines.Add($"Removed the {label}.");
+                return;
+            }
+
+            var fileName = AttachedFileName(imageFileNames, newValue);
+            lines.Add(fileName is null ? $"Updated the {label}." : $"Updated the {label} to \"{fileName}\".");
         }
 
         void Toggle(bool oldValue, bool newValue, string whenOn, string whenOff)
@@ -110,6 +122,19 @@ public static class ProfileChangeSummary
             "Customers can now download your menu as a PDF.", "Turned off menu PDF downloads.");
 
         return lines;
+    }
+
+    /// <summary>The name of the attached file an image URL was uploaded from, or null when it isn't known.</summary>
+    public static string? AttachedFileName(IReadOnlyDictionary<string, string>? imageFileNames, string? url)
+    {
+        if (imageFileNames is null || string.IsNullOrWhiteSpace(url)
+            || !imageFileNames.TryGetValue(url.Trim(), out var name) || string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        name = name.Trim();
+        return name.Length > MaxFileNameLength ? name[..MaxFileNameLength] + "..." : name;
     }
 
     private static bool Same(string? left, string? right) =>

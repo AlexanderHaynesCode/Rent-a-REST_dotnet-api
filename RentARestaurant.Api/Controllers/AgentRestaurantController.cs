@@ -107,7 +107,7 @@ public class AgentRestaurantController(
                 }
 
                 var profileAfter = await LoadProfileAsync(tenantId, cancellationToken);
-                var profileLines = ProfileChangeSummary.Describe(profileBefore, profileAfter!);
+                var profileLines = ProfileChangeSummary.Describe(profileBefore, profileAfter!, changeSet.ImageFileNames);
                 appliedSummary.AddRange(profileLines);
 
                 if (profileLines.Count == 0 && rejectedSummary.Count == rejectedBefore)
@@ -157,7 +157,7 @@ public class AgentRestaurantController(
 
         // Menus and categories created in this same change-set have no id until applied - later changes
         // that reference one by name (instead of a real id) are resolved against this context.
-        var menuContext = new MenuApplyContext();
+        var menuContext = new MenuApplyContext { ImageFileNames = changeSet.ImageFileNames };
 
         if (changeSet.MenuChanges is { Count: > 0 } menuChanges)
         {
@@ -424,6 +424,9 @@ public class AgentRestaurantController(
         // they point at one of these are dropped silently - the root reason was already reported.
         public HashSet<string> SkippedMenuNames { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> SkippedCategoryNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        // Uploaded image URL -> attached file name, used to name a new menu background image in the summary.
+        public IReadOnlyDictionary<string, string>? ImageFileNames { get; init; }
     }
 
     private static (List<AgentDateSpecificHoursChange> Active, List<string> Rejected, string? Error) ValidateDateSpecificHours(
@@ -798,7 +801,7 @@ public class AgentRestaurantController(
                         : $"Created the menu '{name}'.");
                     if (change.HasStyleFields)
                     {
-                        await ApplyMenuStyleAsync(tenantId, created.Id.Value, change, summary, rejected, cancellationToken);
+                        await ApplyMenuStyleAsync(tenantId, created.Id.Value, change, context, summary, rejected, cancellationToken);
                     }
                     break;
                 case MenuMutationStatus.LimitReached:
@@ -835,7 +838,7 @@ public class AgentRestaurantController(
 
             if (change.HasStyleFields)
             {
-                await ApplyMenuStyleAsync(tenantId, current.Id, change, summary, rejected, cancellationToken);
+                await ApplyMenuStyleAsync(tenantId, current.Id, change, context, summary, rejected, cancellationToken);
             }
 
             return;
@@ -928,6 +931,7 @@ public class AgentRestaurantController(
         Guid tenantId,
         Guid menuId,
         AgentMenuChange change,
+        MenuApplyContext context,
         List<string> summary,
         List<string> rejected,
         CancellationToken cancellationToken)
@@ -1045,7 +1049,7 @@ public class AgentRestaurantController(
 
         var after = await dbContext.Menus.AsNoTracking()
             .SingleAsync(x => x.Id == menuId && x.TenantId == tenantId, cancellationToken);
-        var lines = MenuStyleChangeSummary.Describe(before, after);
+        var lines = MenuStyleChangeSummary.Describe(before, after, context.ImageFileNames);
         summary.AddRange(lines);
 
         if (lines.Count == 0 && rejected.Count == rejectedBefore)
@@ -1113,7 +1117,7 @@ public class AgentRestaurantController(
                     $"{clone.Categories.Count} category(ies) and {itemCount} item(s){hidden}.");
                 if (change.HasStyleFields)
                 {
-                    await ApplyMenuStyleAsync(tenantId, clone.Menu.Id, change, summary, rejected, cancellationToken);
+                    await ApplyMenuStyleAsync(tenantId, clone.Menu.Id, change, context, summary, rejected, cancellationToken);
                 }
                 break;
             case MenuCloneStatus.LimitReached:

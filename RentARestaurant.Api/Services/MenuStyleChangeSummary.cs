@@ -9,10 +9,11 @@ namespace RentARestaurant.Api.Services;
 /// </summary>
 public static class MenuStyleChangeSummary
 {
-    public static List<string> Describe(Menu before, Menu after)
+    public static List<string> Describe(Menu before, Menu after, IReadOnlyDictionary<string, string>? imageFileNames = null)
     {
         var lines = new List<string>();
         var menu = $"the menu '{after.Name}'";
+        var fileName = ProfileChangeSummary.AttachedFileName(imageFileNames, after.BackgroundImageUrl);
 
         var styleBefore = before.BackgroundStyle;
         var styleAfter = after.BackgroundStyle;
@@ -25,11 +26,11 @@ public static class MenuStyleChangeSummary
         }
         else if (styleBefore == MenuBackgroundRules.NoneStyle)
         {
-            lines.Add($"Added {BackgroundDescription(after)} to {menu}.");
+            lines.Add($"Added {BackgroundDescription(after, fileName)} to {menu}.");
         }
         else if (styleBefore != styleAfter)
         {
-            lines.Add($"Changed the background of {menu} to {BackgroundDescription(after)}.");
+            lines.Add($"Changed the background of {menu} to {BackgroundDescription(after, fileName)}.");
         }
         else if (styleAfter == MenuBackgroundRules.ColorStyle && !SameText(before.BackgroundHexColor, after.BackgroundHexColor))
         {
@@ -43,7 +44,9 @@ public static class MenuStyleChangeSummary
         {
             lines.Add(string.IsNullOrWhiteSpace(after.BackgroundImageUrl)
                 ? $"Removed the background image of {menu}."
-                : $"Updated the background image of {menu}.");
+                : fileName is null
+                    ? $"Updated the background image of {menu}."
+                    : $"Updated the background image of {menu} to \"{fileName}\".");
         }
 
         if (before.ShowBackgroundOnSite != after.ShowBackgroundOnSite)
@@ -74,10 +77,11 @@ public static class MenuStyleChangeSummary
         return lines;
     }
 
-    private static string BackgroundDescription(Menu menu) => menu.BackgroundStyle switch
+    private static string BackgroundDescription(Menu menu, string? imageFileName) => menu.BackgroundStyle switch
     {
         MenuBackgroundRules.ColorStyle => $"a solid color background ({menu.BackgroundHexColor})",
         MenuBackgroundRules.PatternStyle => $"a {MenuBackgroundRules.PatternLabel(menu.BackgroundPattern)} pattern background",
+        MenuBackgroundRules.ImageStyle when imageFileName is not null => $"an image background (\"{imageFileName}\")",
         MenuBackgroundRules.ImageStyle => "an image background",
         _ => "a background"
     };

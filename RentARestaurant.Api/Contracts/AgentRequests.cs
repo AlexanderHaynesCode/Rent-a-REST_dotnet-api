@@ -141,6 +141,8 @@ public sealed record AgentMenuSettingsChange(
 /// <summary>
 /// All fields are optional so the validator only needs to send what actually changed.
 /// Unset (null) list fields mean "no changes of that kind".
+/// ImageFileNames maps an uploaded image URL to the name of the file the tenant attached; it is only used to
+/// name that file in the "updates are live" email.
 /// </summary>
 public sealed record AgentChangeSet(
     IReadOnlyList<AgentMenuCategoryChange>? MenuCategoryChanges,
@@ -150,7 +152,8 @@ public sealed record AgentChangeSet(
     IReadOnlyList<AgentDateSpecificHoursChange>? DateSpecificHoursChanges = null,
     IReadOnlyList<AgentMenuChange>? MenuChanges = null,
     AgentHoursDisplayChange? HoursDisplayChange = null,
-    AgentMenuSettingsChange? MenuSettingsChange = null);
+    AgentMenuSettingsChange? MenuSettingsChange = null,
+    IReadOnlyDictionary<string, string>? ImageFileNames = null);
 
 public sealed record ApplyAgentChangeSetRequest(
     Guid SubmissionId,
