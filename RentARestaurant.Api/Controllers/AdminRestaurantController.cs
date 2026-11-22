@@ -39,7 +39,7 @@ public class AdminRestaurantController(
     {
         try
         {
-            var externalUserId = HttpContext.Request.Headers["X-Admin-User-Id"].ToString().Trim();
+            var externalUserId = HttpContext.GetAdminUserId()!;
             var resolution = await tenantAccessService.ResolveSingleTenantForAdminAsync(externalUserId, cancellationToken);
 
             if (resolution.Status == TenantResolutionStatus.NotFound || resolution.Tenant is null)

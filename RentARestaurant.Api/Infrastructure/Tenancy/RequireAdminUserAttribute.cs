@@ -8,10 +8,9 @@ public sealed class RequireAdminUserAttribute : Attribute, IAsyncActionFilter
 {
     public Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        if (!context.HttpContext.Request.Headers.TryGetValue("X-Admin-User-Id", out var externalUserId)
-            || string.IsNullOrWhiteSpace(externalUserId))
+        if (context.HttpContext.GetAdminUserId() is null)
         {
-            context.Result = new UnauthorizedObjectResult(new { Error = "Missing X-Admin-User-Id header." });
+            context.Result = new UnauthorizedObjectResult(new { Error = "Sign-in required." });
             return Task.CompletedTask;
         }
 

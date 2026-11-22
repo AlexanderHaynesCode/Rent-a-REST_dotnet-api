@@ -14,7 +14,7 @@ public class AdminSubscriptionController(ISubscriptionService subscriptionServic
     [RequireAdminAccess]
     public async Task<ActionResult<AdminSubscriptionResponse>> Get(CancellationToken cancellationToken)
     {
-        var externalUserId = HttpContext.Request.Headers["X-Admin-User-Id"].ToString().Trim();
+        var externalUserId = HttpContext.GetAdminUserId()!;
         return Ok(await subscriptionService.GetCurrentAsync(externalUserId, cancellationToken));
     }
 

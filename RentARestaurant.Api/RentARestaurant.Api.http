@@ -1,6 +1,8 @@
 @RentARestaurant.Api_HostAddress = http://localhost:5099
 @tenantSlug = beef-store
-@adminUserId = owner-demo
+# Clerk session token: sign in to the admin portal and run `await window.Clerk.session.getToken()`
+# in the browser console. It expires after about 60 seconds.
+@clerkToken = paste-token-here
 
 GET {{RentARestaurant.Api_HostAddress}}/health
 Accept: application/json
@@ -14,7 +16,7 @@ Accept: application/json
 
 GET {{RentARestaurant.Api_HostAddress}}/api/admin/restaurant
 X-Tenant-Slug: {{tenantSlug}}
-X-Admin-User-Id: {{adminUserId}}
+Authorization: Bearer {{clerkToken}}
 Accept: application/json
 
 ###

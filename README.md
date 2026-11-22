@@ -39,14 +39,16 @@ GET http://localhost:5000/health
 On first run, the database is created and seeded with:
 
 - slug: `beef-store`
-- admin header user: `owner-demo`
+- admin member user ID: `owner-demo`
 
-Use these headers for admin calls:
+Admin calls need a Clerk session token, and the admin user ID is taken from the token's `sub` claim. The seeded `owner-demo` member only works if you change its `external_user_id` to your Clerk dev user's ID (`user_...`).
 
 ```text
 X-Tenant-Slug: beef-store
-X-Admin-User-Id: owner-demo
+Authorization: Bearer <Clerk session token>
 ```
+
+To get a token, sign in to the admin portal and run `await window.Clerk.session.getToken()` in the browser console. Tokens expire after about 60 seconds.
 
 ## Key endpoints
 
@@ -78,10 +80,12 @@ Important keys:
 - `TenantResolution:PlatformHosts`
 - `LocalMediaStorage:RootPath`
 - `Stripe:WebhookSigningSecret`
+- `Clerk:Issuer`: the Clerk Frontend API URL (Clerk dashboard, API keys). Required; the API won't start without it. On Railway: `Clerk__Issuer`.
+- `Clerk:AuthorizedParties`: the admin portal origins allowed in the token's `azp` claim. On Railway: `Clerk__AuthorizedParties__0`, `Clerk__AuthorizedParties__1`, ...
+- `Provisioning:AllowDirectProvisioning`: lets `POST /api/system/provisioning/tenants` create tenants without payment. `false` by default; only turn it on locally.
 
 ## Next hardening steps
 
-- Replace header-based admin identity with JWT auth.
 - Verify real Stripe signatures using Stripe's SDK.
 - Add migrations and switch connection string to Railway PostgreSQL.
 - Add request validation and integration tests.

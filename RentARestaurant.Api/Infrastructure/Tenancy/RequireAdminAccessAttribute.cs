@@ -17,10 +17,10 @@ public sealed class RequireAdminAccessAttribute : Attribute, IAsyncActionFilter
             return;
         }
 
-        if (!context.HttpContext.Request.Headers.TryGetValue("X-Admin-User-Id", out var externalUserId)
-            || string.IsNullOrWhiteSpace(externalUserId))
+        var externalUserId = context.HttpContext.GetAdminUserId();
+        if (externalUserId is null)
         {
-            context.Result = new UnauthorizedObjectResult(new { Error = "Missing X-Admin-User-Id header." });
+            context.Result = new UnauthorizedObjectResult(new { Error = "Sign-in required." });
             return;
         }
 
@@ -28,7 +28,7 @@ public sealed class RequireAdminAccessAttribute : Attribute, IAsyncActionFilter
 
         var allowed = await tenantAccessService.CanManageTenantAsync(
             tenantContext.TenantId.Value,
-            externalUserId.ToString().Trim(),
+            externalUserId,
             context.HttpContext.RequestAborted);
 
         if (!allowed)

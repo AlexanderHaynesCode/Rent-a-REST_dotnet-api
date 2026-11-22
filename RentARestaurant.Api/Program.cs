@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using RentARestaurant.Api.Data;
 using RentARestaurant.Api.Infrastructure.Agent;
 using RentARestaurant.Api.Infrastructure.Email;
@@ -59,6 +61,69 @@ builder.Services.AddSingleton<IR2StorageService, CloudflareR2StorageService>();
 
 Stripe.StripeConfiguration.ApiKey = builder.Configuration["Stripe:SecretKey"];
 
+// Admin requests are signed in through Clerk: the admin portal sends the Clerk session token as a
+// Bearer token, and the admin user ID comes from its sub claim (see AdminUserHttpContextExtensions).
+var clerkOptions = builder.Configuration.GetSection(ClerkAuthOptions.SectionName).Get<ClerkAuthOptions>()
+    ?? new ClerkAuthOptions();
+var clerkIssuer = clerkOptions.Issuer.Trim().TrimEnd('/');
+if (string.IsNullOrEmpty(clerkIssuer))
+{
+    throw new InvalidOperationException(
+        "Clerk:Issuer must be set to the Clerk Frontend API URL so admin sign-in tokens can be checked.");
+}
+
+var clerkAuthorizedParties = clerkOptions.AuthorizedParties
+    .Where(party => !string.IsNullOrWhiteSpace(party))
+    .Select(party => party.Trim().TrimEnd('/'))
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        // Signing keys come from Clerk's published key set, found via {issuer}/.well-known/openid-configuration.
+        options.Authority = clerkIssuer;
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidIssuer = clerkIssuer,
+            ValidateIssuer = true,
+            ValidateIssuerSigningKey = true,
+            ValidateLifetime = true,
+            // Clerk session tokens carry no audience claim.
+            ValidateAudience = false,
+            ClockSkew = TimeSpan.FromSeconds(30),
+            NameClaimType = "sub",
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = context =>
+            {
+                if (clerkAuthorizedParties.Count == 0)
+                {
+                    return Task.CompletedTask;
+                }
+
+                var authorizedParty = context.Principal?.FindFirst("azp")?.Value?.TrimEnd('/');
+                if (string.IsNullOrEmpty(authorizedParty) || !clerkAuthorizedParties.Contains(authorizedParty))
+                {
+                    context.Fail("The token was not issued for an authorized origin.");
+                }
+
+                return Task.CompletedTask;
+            },
+            OnAuthenticationFailed = context =>
+            {
+                context.HttpContext.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("ClerkAuthentication")
+                    .LogWarning("Clerk token rejected for {Method} {Path}: {Reason}",
+                        context.Request.Method, context.Request.Path, context.Exception.Message);
+                return Task.CompletedTask;
+            },
+        };
+    });
+
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
@@ -106,6 +171,8 @@ app.UseExceptionHandler(exceptionHandlerApp =>
 });
 
 app.UseCors();
+
+app.UseAuthentication();
 
 app.UseMiddleware<TenantResolutionMiddleware>();
 

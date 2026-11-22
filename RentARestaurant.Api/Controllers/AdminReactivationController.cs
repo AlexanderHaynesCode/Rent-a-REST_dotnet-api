@@ -11,7 +11,7 @@ namespace RentARestaurant.Api.Controllers;
 [RequireAdminUser]
 public class AdminReactivationController(ISubscriptionService subscriptionService) : ControllerBase
 {
-    private string ExternalUserId => HttpContext.Request.Headers["X-Admin-User-Id"].ToString().Trim();
+    private string ExternalUserId => HttpContext.GetAdminUserId()!;
 
     [HttpGet]
     public async Task<ActionResult<ReactivationInfoResponse>> Get(CancellationToken cancellationToken)
