@@ -229,7 +229,7 @@ CREATE TABLE restaurant_profiles (
     show_top_hours_section BOOLEAN NOT NULL DEFAULT TRUE,
     top_hours_style VARCHAR(20) NOT NULL DEFAULT 'standard',
     top_hours_open_status_detail VARCHAR(30) NOT NULL DEFAULT 'none',
-    show_bottom_hours_section BOOLEAN NOT NULL DEFAULT TRUE,
+    show_bottom_hours_section BOOLEAN NOT NULL DEFAULT FALSE,
     use_legacy_bottom_hours_style BOOLEAN NOT NULL DEFAULT FALSE,
     show_custom_background BOOLEAN NOT NULL DEFAULT FALSE,
     custom_background_hex_color_1 VARCHAR(12),
@@ -303,6 +303,13 @@ ADD COLUMN IF NOT EXISTS use_legacy_hours_style BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE restaurant_profiles
 ADD COLUMN IF NOT EXISTS show_bottom_hours_section BOOLEAN NOT NULL DEFAULT TRUE,
 ADD COLUMN IF NOT EXISTS use_legacy_bottom_hours_style BOOLEAN NOT NULL DEFAULT FALSE;
+```
+
+**For existing databases, make new signups start with the bottom-of-page hours section hidden. Existing rows keep their current setting; only newly inserted profiles get FALSE (the API's `RestaurantProfile.ShowBottomHoursSection` also defaults to false):**
+
+```sql
+ALTER TABLE restaurant_profiles
+ALTER COLUMN show_bottom_hours_section SET DEFAULT FALSE;
 ```
 
 **For existing databases, add the top-of-page hours section settings (the hours section shown above the menu on the restaurant site). `show_top_hours_section` defaults to TRUE and `top_hours_style` defaults to `'standard'` (the full weekly hours list, styled by the existing `use_legacy_hours_style`), so existing sites look unchanged. `'open-status'` replaces the list with an "Open Now!"/"Closed" message, and `top_hours_open_status_detail` controls the lines beneath it: `'none'`, `'today'` (today's hours) or `'today-and-tomorrow'`. Run this before deploying the API, since EF selects all three columns:**

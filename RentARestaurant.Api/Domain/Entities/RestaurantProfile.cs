@@ -20,7 +20,7 @@ public class RestaurantProfile : ITenantEntity
     public bool ShowTopHoursSection { get; set; } = true;
     public string TopHoursStyle { get; set; } = Contracts.TopHoursOptions.StandardStyle;
     public string TopHoursOpenStatusDetail { get; set; } = Contracts.TopHoursOptions.NoDetail;
-    public bool ShowBottomHoursSection { get; set; } = true;
+    public bool ShowBottomHoursSection { get; set; }
     public bool UseLegacyBottomHoursStyle { get; set; }
     public bool ShowCustomBackground { get; set; }
     public string? CustomBackgroundHexColor1 { get; set; }

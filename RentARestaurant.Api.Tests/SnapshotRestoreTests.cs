@@ -119,7 +119,7 @@ public class SnapshotRestoreTests
         profile.TopHoursStyle = TopHoursOptions.StandardStyle;
         profile.TopHoursOpenStatusDetail = TopHoursOptions.NoDetail;
         profile.UseLegacyHoursStyle = true;
-        profile.ShowBottomHoursSection = false;
+        profile.ShowBottomHoursSection = true;
         profile.UseLegacyBottomHoursStyle = true;
         profile.AllowMenuPdfDownload = false;
         await _db.SaveChangesAsync();
