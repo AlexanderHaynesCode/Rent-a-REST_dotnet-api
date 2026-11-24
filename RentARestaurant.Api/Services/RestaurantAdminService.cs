@@ -240,7 +240,8 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 ContactHoursWhiteBackground: profile.ContactHoursWhiteBackground,
                 ContactHoursWhiteBackgroundTransparency: profile.ContactHoursWhiteBackgroundTransparency,
                 ApplyTransparencyToMenuItems: profile.ApplyTransparencyToMenuItems,
-                HideHeroImage: profile.HideHeroImage);
+                HideHeroImage: profile.HideHeroImage,
+                PrimaryCtaText: profile.PrimaryCtaText);
     }
 
     public async Task<bool> UpdateBrandingAsync(Guid tenantId, UpdateBrandingRequest request, CancellationToken cancellationToken)
@@ -261,6 +262,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         profile.LogoUrl = request.LogoUrl;
         profile.HeroImageUrl = request.HeroImageUrl;
         profile.PrimaryCtaUrl = request.PrimaryCtaUrl;
+        profile.PrimaryCtaText = request.PrimaryCtaText;
         profile.Address = request.Address;
         profile.PhoneNumber = request.PhoneNumber;
         profile.ShowCustomBackground = request.ShowCustomBackground;
@@ -903,9 +905,10 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             profile.SecondaryHexColor = snapshot.SecondaryHexColor;
             profile.LogoUrl = snapshot.LogoUrl;
             profile.HeroImageUrl = snapshot.HeroImageUrl;
-            profile.PrimaryCtaUrl = snapshot.PrimaryCtaUrl;
+            profile.PrimaryCtaUrl = BrandingRules.RestorableCtaUrl(snapshot.PrimaryCtaUrl);
             profile.Address = snapshot.Address;
             profile.PhoneNumber = snapshot.PhoneNumber;
+            if (Has(nameof(snapshot.PrimaryCtaText))) profile.PrimaryCtaText = snapshot.PrimaryCtaText;
 
             if (Has(nameof(snapshot.UseLegacyHoursStyle))) profile.UseLegacyHoursStyle = snapshot.UseLegacyHoursStyle;
             if (Has(nameof(snapshot.ShowTopHoursSection))) profile.ShowTopHoursSection = snapshot.ShowTopHoursSection;

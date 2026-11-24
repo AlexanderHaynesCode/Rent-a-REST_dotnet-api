@@ -606,7 +606,7 @@ public class AgentRestaurantController(
             NullIfBlank(branding.SecondaryHexColor) ?? profile.SecondaryHexColor,
             logoUrl,
             heroImageUrl,
-            branding.PrimaryCtaUrl?.Trim() ?? profile.PrimaryCtaUrl,
+            branding.PrimaryCtaUrl is null ? profile.PrimaryCtaUrl : BrandingRules.NormalizeCtaUrl(branding.PrimaryCtaUrl),
             branding.Address is null ? profile.Address : NullIfBlank(branding.Address),
             branding.PhoneNumber is null ? profile.PhoneNumber : NullIfBlank(branding.PhoneNumber),
             showCustomBackground,
@@ -626,7 +626,8 @@ public class AgentRestaurantController(
             ContactHoursWhiteBackground: whiteBackground,
             ContactHoursWhiteBackgroundTransparency: branding.ContactHoursWhiteBackgroundTransparency ?? profile.ContactHoursWhiteBackgroundTransparency,
             ApplyTransparencyToMenuItems: branding.ApplyTransparencyToMenuItems ?? profile.ApplyTransparencyToMenuItems,
-            HideHeroImage: branding.HideHeroImage ?? (!heroImageSet && profile.HideHeroImage));
+            HideHeroImage: branding.HideHeroImage ?? (!heroImageSet && profile.HideHeroImage),
+            PrimaryCtaText: branding.PrimaryCtaText is null ? profile.PrimaryCtaText : NullIfBlank(branding.PrimaryCtaText));
 
         string? error = null;
         if (!BrandingRules.IsHexColor(merged.PrimaryHexColor) || !BrandingRules.IsHexColor(merged.SecondaryHexColor))

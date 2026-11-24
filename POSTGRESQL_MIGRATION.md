@@ -223,6 +223,7 @@ CREATE TABLE restaurant_profiles (
     logo_url TEXT,
     hero_image_url TEXT,
     primary_cta_url TEXT,
+    primary_cta_text VARCHAR(30),
     address VARCHAR(300),
     phone_number VARCHAR(30),
     use_legacy_hours_style BOOLEAN NOT NULL DEFAULT FALSE,
@@ -267,7 +268,8 @@ CREATE TABLE restaurant_profiles (
     CONSTRAINT hex_color_format_custom_background_main CHECK (custom_background_main_hex_color IS NULL OR custom_background_main_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
     CONSTRAINT top_hours_style_values CHECK (top_hours_style IN ('standard', 'open-status')),
     CONSTRAINT top_hours_open_status_detail_values CHECK (top_hours_open_status_detail IN ('none', 'today', 'today-and-tomorrow')),
-    CONSTRAINT contact_hours_white_background_transparency_range CHECK (contact_hours_white_background_transparency BETWEEN 0 AND 100)
+    CONSTRAINT contact_hours_white_background_transparency_range CHECK (contact_hours_white_background_transparency BETWEEN 0 AND 100),
+    CONSTRAINT primary_cta_url_web_link CHECK (primary_cta_url IS NULL OR primary_cta_url ~* '^https?://')
 );
 
 CREATE INDEX idx_restaurant_profiles_updated_utc ON restaurant_profiles(updated_utc);
@@ -401,6 +403,20 @@ ADD COLUMN IF NOT EXISTS apply_transparency_to_menu_items BOOLEAN NOT NULL DEFAU
 ```sql
 ALTER TABLE restaurant_profiles
 ADD COLUMN IF NOT EXISTS hide_hero_image BOOLEAN NOT NULL DEFAULT FALSE;
+```
+
+**For existing databases, add the call-to-action button text and keep the button's link to web links (set by the admin portal's "Call-to-action button" fields on the Branding page). The button sits beside the restaurant name on the restaurant site and opens `primary_cta_url`, the tenant's online ordering or reservation page, in a new tab; it is hidden while `primary_cta_url` is NULL. `primary_cta_text` is the button's label, NULL meaning the default "Order Online" (the admin portal offers presets or up to 30 characters of custom text). The admin portal used to treat `primary_cta_url` as an image upload slot (`images/primary-cta`), so the UPDATE clears those image URLs and anything else that isn't a web link before the CHECK is added; the affected tenants' buttons disappear until they enter their ordering link. Preview them first with `SELECT tenant_id, primary_cta_url FROM restaurant_profiles` plus the same WHERE. The old `tenants/{tenantId}/primary-cta` objects in R2 are no longer referenced and can be deleted by hand in Cloudflare. Run this before deploying the API, since EF selects `primary_cta_text`:**
+
+```sql
+ALTER TABLE restaurant_profiles
+ADD COLUMN IF NOT EXISTS primary_cta_text VARCHAR(30);
+
+UPDATE restaurant_profiles SET primary_cta_url = NULL
+WHERE primary_cta_url IS NOT NULL
+  AND (primary_cta_url !~* '^https?://' OR primary_cta_url ~ '/tenants/[0-9a-fA-F-]{36}/primary-cta');
+
+ALTER TABLE restaurant_profiles
+ADD CONSTRAINT primary_cta_url_web_link CHECK (primary_cta_url IS NULL OR primary_cta_url ~* '^https?://');
 ```
 
 ---
@@ -748,13 +764,15 @@ CREATE TABLE restaurant_profiles (
     logo_url TEXT,
     hero_image_url TEXT,
     primary_cta_url TEXT,
+    primary_cta_text VARCHAR(30),
     address VARCHAR(300),
     phone_number VARCHAR(30),
     updated_utc TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     CONSTRAINT display_name_not_empty CHECK (display_name != ''),
     CONSTRAINT hex_color_format_primary CHECK (primary_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
-    CONSTRAINT hex_color_format_secondary CHECK (secondary_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$')
+    CONSTRAINT hex_color_format_secondary CHECK (secondary_hex_color ~ '^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$'),
+    CONSTRAINT primary_cta_url_web_link CHECK (primary_cta_url IS NULL OR primary_cta_url ~* '^https?://')
 );
 
 CREATE INDEX idx_restaurant_profiles_updated_utc ON restaurant_profiles(updated_utc);

@@ -124,7 +124,8 @@ public sealed record AgentBrandingChange(
     int? CustomBackgroundPosition2X = null,
     int? CustomBackgroundPosition2Y = null,
     string? CustomBackgroundImageUrl = null,
-    bool? CustomBackgroundImageActive = null);
+    bool? CustomBackgroundImageActive = null,
+    string? PrimaryCtaText = null);
 
 /// <summary>Settings of the top-of-page and bottom-of-page hours sections; null leaves a setting as is.</summary>
 public sealed record AgentHoursDisplayChange(

@@ -1,4 +1,5 @@
 using RentARestaurant.Api.Contracts;
+using RentARestaurant.Api.Domain;
 using RentARestaurant.Api.Domain.Entities;
 
 namespace RentARestaurant.Api.Services;
@@ -49,7 +50,18 @@ public static class ProfileChangeSummary
         Text(before.SecondaryHexColor, after.SecondaryHexColor, "secondary color");
         Image(before.LogoUrl, after.LogoUrl, "logo");
         Image(before.HeroImageUrl, after.HeroImageUrl, "hero image");
-        Image(before.PrimaryCtaUrl, after.PrimaryCtaUrl, "primary button link");
+        if (!Same(before.PrimaryCtaUrl, after.PrimaryCtaUrl))
+        {
+            lines.Add(string.IsNullOrWhiteSpace(after.PrimaryCtaUrl)
+                ? "Removed the call-to-action button."
+                : $"Changed the call-to-action button link to \"{after.PrimaryCtaUrl}\".");
+        }
+        if (!Same(before.PrimaryCtaText, after.PrimaryCtaText))
+        {
+            lines.Add(string.IsNullOrWhiteSpace(after.PrimaryCtaText)
+                ? $"Reset the call-to-action button text to \"{BrandingRules.DefaultCtaText}\"."
+                : $"Changed the call-to-action button text to \"{after.PrimaryCtaText}\".");
+        }
         Text(before.Address, after.Address, "address");
         Text(before.PhoneNumber, after.PhoneNumber, "phone number");
 

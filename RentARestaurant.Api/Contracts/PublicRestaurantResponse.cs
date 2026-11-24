@@ -45,7 +45,8 @@ public sealed record PublicRestaurantResponse(
     bool ContactHoursWhiteBackground = false,
     int ContactHoursWhiteBackgroundTransparency = ContactHoursWhiteBackgroundDefaults.Transparency,
     bool ApplyTransparencyToMenuItems = false,
-    bool HideHeroImage = false);
+    bool HideHeroImage = false,
+    string? PrimaryCtaText = null);
 
 /// <summary>
 /// The public storefront response only includes visible menus; the admin/agent snapshot includes all

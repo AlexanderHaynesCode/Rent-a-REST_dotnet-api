@@ -14,6 +14,7 @@ public class RestaurantProfile : ITenantEntity
     public string? LogoUrl { get; set; }
     public string? HeroImageUrl { get; set; }
     public string? PrimaryCtaUrl { get; set; }
+    public string? PrimaryCtaText { get; set; }
     public string? Address { get; set; }
     public string? PhoneNumber { get; set; }
     public bool UseLegacyHoursStyle { get; set; }

@@ -138,7 +138,8 @@ public class AdminRestaurantController(
             SecondaryHexColor = request.SecondaryHexColor.Trim(),
             LogoUrl = request.LogoUrl?.Trim(),
             HeroImageUrl = request.HeroImageUrl?.Trim(),
-            PrimaryCtaUrl = request.PrimaryCtaUrl?.Trim(),
+            PrimaryCtaUrl = BrandingRules.NormalizeCtaUrl(request.PrimaryCtaUrl),
+            PrimaryCtaText = NullIfBlank(request.PrimaryCtaText),
             Address = NullIfBlank(request.Address),
             PhoneNumber = NullIfBlank(request.PhoneNumber),
             CustomBackgroundHexColor1 = NullIfBlank(request.CustomBackgroundHexColor1),
@@ -248,7 +249,7 @@ public class AdminRestaurantController(
         var normalizedImageType = imageType.Trim();
         if (!IsSupportedBrandingImageType(normalizedImageType))
         {
-            return BadRequest(new { Error = "imageType must be one of: logo, hero, primary-cta, custom-background." });
+            return BadRequest(new { Error = "imageType must be one of: logo, hero, custom-background." });
         }
 
         if (ValidateImageFile(file) is { } fileError)
@@ -304,7 +305,7 @@ public class AdminRestaurantController(
         var normalizedImageType = imageType.Trim();
         if (!IsSupportedBrandingImageType(normalizedImageType))
         {
-            return BadRequest(new { Error = "imageType must be one of: logo, hero, primary-cta, custom-background." });
+            return BadRequest(new { Error = "imageType must be one of: logo, hero, custom-background." });
         }
 
         var profile = await dbContext.RestaurantProfiles
@@ -812,7 +813,6 @@ public class AdminRestaurantController(
     private static bool IsSupportedBrandingImageType(string imageType) =>
         imageType.Equals("logo", StringComparison.OrdinalIgnoreCase) ||
         imageType.Equals("hero", StringComparison.OrdinalIgnoreCase) ||
-        imageType.Equals("primary-cta", StringComparison.OrdinalIgnoreCase) ||
         imageType.Equals("custom-background", StringComparison.OrdinalIgnoreCase);
 
     private static string WithUploadVersion(string url)
@@ -830,9 +830,6 @@ public class AdminRestaurantController(
                 break;
             case "hero":
                 profile.HeroImageUrl = url;
-                break;
-            case "primary-cta":
-                profile.PrimaryCtaUrl = url;
                 break;
             case "custom-background":
                 profile.CustomBackgroundImageUrl = url;
