@@ -1332,6 +1332,12 @@ public class AgentRestaurantController(
             return;
         }
 
+        if (MenuItemPriceRules.Validate(change.PriceOptions) is { } priceError)
+        {
+            rejected.Add($"Skipped menu item '{requestedName ?? "unknown"}': {priceError}");
+            return;
+        }
+
         switch (action)
         {
             case AgentItemAction.Create:
@@ -1362,13 +1368,14 @@ public class AgentRestaurantController(
                     change.Description?.Trim() ?? string.Empty,
                     change.Price ?? 0m,
                     change.IsAvailable ?? true,
-                    change.SortOrder ?? 0);
+                    change.SortOrder ?? 0,
+                    MenuItemPriceRules.Normalize(change.PriceOptions));
 
                 var result = await restaurantAdminService.CreateMenuItemAsync(tenantId, request, cancellationToken);
                 switch (result.Status)
                 {
                     case MenuItemMutationStatus.Success:
-                        summary.Add($"Created menu item '{request.Name}' (${request.Price:0.00}).");
+                        summary.Add($"Created menu item '{request.Name}' ({MenuItemPriceRules.Describe(request.Price, request.PriceOptions)}).");
                         break;
                     case MenuItemMutationStatus.LimitReached:
                         rejected.Add($"Skipped menu item '{request.Name}' - the {MenuLimits.MaxItemsPerTenant}-item limit was reached.");
@@ -1390,18 +1397,29 @@ public class AgentRestaurantController(
                     break;
                 }
 
+                // A lone price can't say which size it is for (agent-validator-service asks the tenant first).
+                if (change.Price is not null && change.PriceOptions is null && current.PriceOptions is { Count: > 0 } sizes)
+                {
+                    rejected.Add(
+                        $"Skipped the change to menu item '{current.Name}' - it has sizes ({string.Join(", ", sizes.Select(s => s.Label))}), " +
+                        "so a new price has to say which size it is for.");
+                    break;
+                }
+
                 var merged = new UpdateMenuItemRequest(
                     change.CategoryId ?? current.CategoryId,
                     requestedName ?? current.Name,
                     change.Description?.Trim() ?? current.Description,
                     change.Price ?? current.Price,
                     change.IsAvailable ?? current.IsAvailable,
-                    change.SortOrder ?? current.SortOrder);
+                    change.SortOrder ?? current.SortOrder,
+                    // Null keeps the sizes; an empty list removes them.
+                    change.PriceOptions is null ? current.PriceOptions : MenuItemPriceRules.Normalize(change.PriceOptions));
 
                 var updateResult = await restaurantAdminService.UpdateMenuItemAsync(tenantId, current.Id, merged, cancellationToken);
                 if (updateResult.Status == MenuItemMutationStatus.Success)
                 {
-                    summary.Add($"Updated menu item '{merged.Name}' (${merged.Price:0.00}).");
+                    summary.Add($"Updated menu item '{merged.Name}' ({MenuItemPriceRules.Describe(merged.Price, merged.PriceOptions)}).");
                 }
                 else
                 {

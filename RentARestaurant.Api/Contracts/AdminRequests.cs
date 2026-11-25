@@ -1,3 +1,5 @@
+using RentARestaurant.Api.Domain;
+
 namespace RentARestaurant.Api.Contracts;
 
 public sealed record UpdateBrandingRequest(
@@ -152,21 +154,28 @@ public static class MenuLimits
     public const int MaxDescriptionLength = 300;
 }
 
+/// <summary>
+/// PriceOptions null or empty means the item has the single price Price. With 2-4 sizes Price is ignored and set to
+/// the first size's price (see <see cref="MenuItemPriceRules"/>).
+/// </summary>
 public sealed record CreateMenuItemRequest(
     Guid CategoryId,
     string Name,
     string Description,
     decimal Price,
     bool IsAvailable,
-    int SortOrder);
+    int SortOrder,
+    IReadOnlyList<MenuItemPriceOption>? PriceOptions = null);
 
+/// <summary>Replaces the whole item, including its sizes: PriceOptions null or empty means a single price.</summary>
 public sealed record UpdateMenuItemRequest(
     Guid CategoryId,
     string Name,
     string Description,
     decimal Price,
     bool IsAvailable,
-    int SortOrder);
+    int SortOrder,
+    IReadOnlyList<MenuItemPriceOption>? PriceOptions = null);
 
 public sealed record MenuReorderEntry(
     Guid Id,

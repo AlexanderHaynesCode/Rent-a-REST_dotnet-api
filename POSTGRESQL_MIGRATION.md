@@ -626,19 +626,35 @@ CREATE TABLE menu_items (
     name VARCHAR(140) NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     price NUMERIC(10, 2) NOT NULL,
+    price_options JSONB,
     is_available BOOLEAN NOT NULL DEFAULT true,
     sort_order INTEGER NOT NULL DEFAULT 0,
     
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     FOREIGN KEY (category_id) REFERENCES menu_categories(id) ON DELETE CASCADE,
     CONSTRAINT name_not_empty CHECK (name != ''),
-    CONSTRAINT price_positive CHECK (price >= 0)
+    CONSTRAINT price_positive CHECK (price >= 0),
+    CONSTRAINT price_options_count CHECK (
+        price_options IS NULL
+        OR (jsonb_typeof(price_options) = 'array' AND jsonb_array_length(price_options) BETWEEN 2 AND 4))
 );
 
 CREATE INDEX idx_menu_items_tenant_id ON menu_items(tenant_id);
 CREATE INDEX idx_menu_items_category_id ON menu_items(category_id);
 CREATE INDEX idx_menu_items_is_available ON menu_items(is_available);
 CREATE INDEX idx_menu_items_sort_order ON menu_items(category_id, sort_order);
+```
+
+**For existing databases, add menu item sizes (the admin portal's "Add sizes" on a menu item, e.g. Small/Medium/Large or 5 pc/8 pc/12 pc/20 pc).** `price_options` is NULL for an item with one price, which the restaurant site shows as is. Otherwise it is an ordered array of 2 to 4 sizes, `[{"label": "Small", "price": 9.99}, {"label": "Large", "price": 13.99}]`, shown in that order as each size's label and price, and `price` holds the first size's price. The CHECK only covers the shape and count; the API (`MenuItemPriceRules`) also requires each label to be 1-24 characters and different from the item's other labels (ignoring case), and each price to be 0 or more. Existing items keep NULL, so nothing changes on existing sites. Run this before deploying the API, since EF selects the column. Safe to re-run except for the constraint, which fails if it already exists:
+
+```sql
+ALTER TABLE menu_items
+ADD COLUMN IF NOT EXISTS price_options JSONB;
+
+ALTER TABLE menu_items
+ADD CONSTRAINT price_options_count CHECK (
+    price_options IS NULL
+    OR (jsonb_typeof(price_options) = 'array' AND jsonb_array_length(price_options) BETWEEN 2 AND 4));
 ```
 
 ---
@@ -849,12 +865,16 @@ CREATE TABLE menu_items (
     name VARCHAR(140) NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     price NUMERIC(10, 2) NOT NULL,
+    price_options JSONB,
     is_available BOOLEAN NOT NULL DEFAULT true,
     sort_order INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
     FOREIGN KEY (category_id) REFERENCES menu_categories(id) ON DELETE CASCADE,
     CONSTRAINT name_not_empty CHECK (name != ''),
-    CONSTRAINT price_positive CHECK (price >= 0)
+    CONSTRAINT price_positive CHECK (price >= 0),
+    CONSTRAINT price_options_count CHECK (
+        price_options IS NULL
+        OR (jsonb_typeof(price_options) = 'array' AND jsonb_array_length(price_options) BETWEEN 2 AND 4))
 );
 
 CREATE INDEX idx_menu_items_tenant_id ON menu_items(tenant_id);

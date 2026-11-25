@@ -97,13 +97,7 @@ public class PublicRestaurantsController(AppDbContext dbContext, ITenantContext 
                 category.SortOrder,
                 items.Where(item => item.CategoryId == category.Id)
                     .OrderBy(item => item.SortOrder)
-                    .Select(item => new PublicMenuItemResponse(
-                        item.Id,
-                        item.Name,
-                        item.Description,
-                        item.Price,
-                        item.IsAvailable,
-                        item.SortOrder))
+                    .Select(PublicMenuItemResponse.From)
                     .ToList(),
                 category.MenuId))
             .ToList();

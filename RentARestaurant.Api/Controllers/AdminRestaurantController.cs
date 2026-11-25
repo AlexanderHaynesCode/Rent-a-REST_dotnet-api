@@ -611,6 +611,11 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<ActionResult<Guid>> CreateMenuItem([FromBody] CreateMenuItemRequest request, CancellationToken cancellationToken)
     {
+        if (MenuItemPriceRules.Validate(request.PriceOptions) is { } priceError)
+        {
+            return BadRequest(new { Error = priceError });
+        }
+
         var trimmedRequest = request with { Name = request.Name.Trim(), Description = request.Description.Trim() };
         var result = await restaurantAdminService.CreateMenuItemAsync(tenantContext.TenantId!.Value, trimmedRequest, cancellationToken);
 
@@ -687,6 +692,11 @@ public class AdminRestaurantController(
     [RequireAdminAccess]
     public async Task<IActionResult> UpdateMenuItem(Guid id, [FromBody] UpdateMenuItemRequest request, CancellationToken cancellationToken)
     {
+        if (MenuItemPriceRules.Validate(request.PriceOptions) is { } priceError)
+        {
+            return BadRequest(new { Error = priceError });
+        }
+
         var trimmedRequest = request with { Name = request.Name.Trim(), Description = request.Description.Trim() };
         var result = await restaurantAdminService.UpdateMenuItemAsync(tenantContext.TenantId!.Value, id, trimmedRequest, cancellationToken);
 

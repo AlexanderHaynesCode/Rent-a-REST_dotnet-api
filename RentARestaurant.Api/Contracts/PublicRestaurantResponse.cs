@@ -125,7 +125,18 @@ public sealed record PublicMenuItemResponse(
     string Description,
     decimal Price,
     bool IsAvailable,
-    int SortOrder);
+    int SortOrder,
+    IReadOnlyList<MenuItemPriceOption>? PriceOptions = null)
+{
+    public static PublicMenuItemResponse From(Domain.Entities.MenuItem item) => new(
+        item.Id,
+        item.Name,
+        item.Description,
+        item.Price,
+        item.IsAvailable,
+        item.SortOrder,
+        item.PriceOptions);
+}
 
 public sealed record BusinessHourResponse(
     DayOfWeek DayOfWeek,

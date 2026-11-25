@@ -1,3 +1,5 @@
+using RentARestaurant.Api.Domain;
+
 namespace RentARestaurant.Api.Contracts;
 
 public enum AgentItemAction
@@ -66,7 +68,6 @@ public sealed record AgentMenuCategoryChange(
     Guid? MenuId = null,
     string? MenuName = null);
 
-/// <summary>MenuId/MenuName only tell same-named categories in different menus apart when CategoryName is used.</summary>
 public sealed record AgentMenuItemChange(
     string Action,
     Guid? ItemId,
@@ -78,7 +79,8 @@ public sealed record AgentMenuItemChange(
     bool? IsAvailable,
     int? SortOrder,
     Guid? MenuId = null,
-    string? MenuName = null);
+    string? MenuName = null,
+    IReadOnlyList<MenuItemPriceOption>? PriceOptions = null);
 
 /// <summary>Times may be null for a closed day; the day's stored times are kept.</summary>
 public sealed record AgentHoursChange(

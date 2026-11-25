@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using RentARestaurant.Api.Domain;
 using RentARestaurant.Api.Domain.Entities;
 using RentARestaurant.Api.Infrastructure.Tenancy;
@@ -175,6 +176,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext
             entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(140);
             entity.Property(x => x.Description).HasColumnName("description").HasMaxLength(1000);
             entity.Property(x => x.Price).HasColumnName("price");
+            // Stored as JSON text in a jsonb column; the list is always replaced as a whole, never edited in place.
+            entity.Property(x => x.PriceOptions)
+                .HasColumnName("price_options")
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    options => MenuItemPriceRules.ToJson(options!),
+                    json => MenuItemPriceRules.FromJson(json),
+                    new ValueComparer<IReadOnlyList<MenuItemPriceOption>?>(
+                        (a, b) => a == null ? b == null : b != null && a.SequenceEqual(b),
+                        options => options == null ? 0 : options.Aggregate(0, (hash, option) => HashCode.Combine(hash, option)),
+                        options => options == null ? null : (IReadOnlyList<MenuItemPriceOption>?)options.ToList()));
             entity.Property(x => x.IsAvailable).HasColumnName("is_available");
             entity.Property(x => x.SortOrder).HasColumnName("sort_order");
             entity.HasOne(x => x.Tenant)

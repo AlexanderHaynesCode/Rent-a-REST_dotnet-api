@@ -181,13 +181,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                 category.SortOrder,
                 items.Where(item => item.CategoryId == category.Id)
                     .OrderBy(item => item.SortOrder)
-                    .Select(item => new PublicMenuItemResponse(
-                        item.Id,
-                        item.Name,
-                        item.Description,
-                        item.Price,
-                        item.IsAvailable,
-                        item.SortOrder))
+                    .Select(PublicMenuItemResponse.From)
                     .ToList(),
                 category.MenuId))
             .ToList();
@@ -601,12 +595,12 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                     Name = sourceItem.Name,
                     Description = sourceItem.Description,
                     Price = sourceItem.Price,
+                    PriceOptions = sourceItem.PriceOptions,
                     IsAvailable = sourceItem.IsAvailable,
                     SortOrder = sourceItem.SortOrder
                 };
                 dbContext.MenuItems.Add(item);
-                itemResponses.Add(new PublicMenuItemResponse(
-                    item.Id, item.Name, item.Description, item.Price, item.IsAvailable, item.SortOrder));
+                itemResponses.Add(PublicMenuItemResponse.From(item));
             }
 
             categoryResponses.Add(new PublicMenuCategoryResponse(
@@ -800,10 +794,10 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
             CategoryId = request.CategoryId,
             Name = request.Name,
             Description = request.Description,
-            Price = request.Price,
             IsAvailable = request.IsAvailable,
             SortOrder = request.SortOrder
         };
+        SetPrices(item, request.Price, request.PriceOptions);
 
         dbContext.MenuItems.Add(item);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -831,12 +825,22 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
         item.CategoryId = request.CategoryId;
         item.Name = request.Name;
         item.Description = request.Description;
-        item.Price = request.Price;
+        SetPrices(item, request.Price, request.PriceOptions);
         item.IsAvailable = request.IsAvailable;
         item.SortOrder = request.SortOrder;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return new MenuItemMutationResult(MenuItemMutationStatus.Success, itemId);
+    }
+
+    /// <summary>
+    /// Callers validate the sizes with <see cref="MenuItemPriceRules.Validate"/> first. While the item has sizes its
+    /// price is the first size's, so anything that only reads the price still gets a sensible number.
+    /// </summary>
+    private static void SetPrices(MenuItem item, decimal price, IReadOnlyList<MenuItemPriceOption>? priceOptions)
+    {
+        item.PriceOptions = MenuItemPriceRules.Normalize(priceOptions);
+        item.Price = item.PriceOptions?[0].Price ?? price;
     }
 
     public async Task<bool> DeleteMenuItemAsync(Guid tenantId, Guid itemId, CancellationToken cancellationToken)
@@ -1161,6 +1165,8 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                         Name = item.Name,
                         Description = item.Description,
                         Price = item.Price,
+                        // A snapshot stored before sizes existed has none, which is what every item had then.
+                        PriceOptions = item.PriceOptions,
                         IsAvailable = item.IsAvailable,
                         SortOrder = item.SortOrder
                     });
@@ -1171,6 +1177,7 @@ public class RestaurantAdminService(AppDbContext dbContext) : IRestaurantAdminSe
                     targetItem.Name = item.Name;
                     targetItem.Description = item.Description;
                     targetItem.Price = item.Price;
+                    targetItem.PriceOptions = item.PriceOptions;
                     targetItem.IsAvailable = item.IsAvailable;
                     targetItem.SortOrder = item.SortOrder;
                 }
